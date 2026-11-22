@@ -14,19 +14,24 @@ import android.widget.*
 class BoostActivity : Activity() {
 
     private val h = Handler(Looper.getMainLooper())
-    private val targets = listOf("Cloudflare (1.1.1.1)" to "1.1.1.1", "Google (8.8.8.8)" to "8.8.8.8") +
-        DnsData.games.map { it.name to it.hosts[0] }
+    private var mode = 0 // 0 = اینترنت، 1 = بازی
+    private val netTargets = listOf("Cloudflare (1.1.1.1)" to "1.1.1.1", "Google (8.8.8.8)" to "8.8.8.8", "Quad9 (9.9.9.9)" to "9.9.9.9")
+    private var gameList: List<KGame> = emptyList()
+    private var noneInstalled = false
+    private var spinnerReady = false
+
     private lateinit var power: PowerView
     private lateinit var status: TextView
     private lateinit var spinner: Spinner
+    private lateinit var spinnerLabel: TextView
+    private lateinit var gameNote: TextView
+    private lateinit var seg: LinearLayout
     private lateinit var tAvg: TextView
     private lateinit var tJit: TextView
     private lateinit var tLoss: TextView
     private lateinit var graph: GraphView
     private lateinit var verdictTv: TextView
-    private val tick = object : Runnable {
-        override fun run() { refresh(); h.postDelayed(this, 1000) }
-    }
+    private val tick = object : Runnable { override fun run() { refresh(); h.postDelayed(this, 1000) } }
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
@@ -34,26 +39,43 @@ class BoostActivity : Activity() {
         T.accent = Color.parseColor(if (repo.blue) "#4DA3FF" else "#FFC21A")
         window.statusBarColor = T.bg
         window.navigationBarColor = T.bg
+        val inst = Games.installed(this)
+        noneInstalled = inst.isEmpty()
+        gameList = if (noneInstalled) Games.known else inst
+
         val sc = ScrollView(this)
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(20)) }
         sc.addView(col)
 
         val hd = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         hd.add(IconView(this, "back", T.text, 26).apply { setOnClickListener { finish() } }, 44, 44)
-        hd.add(tv("Game Boost", 20f, T.text, true).apply { gravity = Gravity.CENTER }, 0, -2, weight = 1f)
+        hd.add(tv("Boost", 20f, T.text, true).apply { gravity = Gravity.CENTER }, 0, -2, weight = 1f)
         hd.add(View(this), 44, 44)
         col.add(hd)
 
+        seg = LinearLayout(this).apply { background = rect(withAlpha(T.card, 235), T.stroke, 14); setPadding(dp(4), dp(4), dp(4), dp(4)) }
+        col.add(seg, t = 8)
+        drawSeg()
+
         power = PowerView(this).apply { setOnClickListener { toggle() } }
-        col.add(power, -1, 230)
+        col.add(power, -1, 220, t = 4)
         status = tv("", 20f, T.text, true).apply { gravity = Gravity.CENTER }
         col.add(status)
 
-        col.add(tv("سرور هدف برای پایش", 13f, T.sub), t = 14, b = 4)
-        spinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@BoostActivity, android.R.layout.simple_spinner_dropdown_item, targets.map { it.first })
-        }
+        spinnerLabel = tv("", 13f, T.sub)
+        col.add(spinnerLabel, t = 12, b = 4)
+        spinner = Spinner(this)
         col.add(spinner)
+        gameNote = tv("بازی شناخته‌شده‌ای روی گوشی پیدا نشد؛ همهٔ بازی‌ها نمایش داده شده‌اند.", 11f, T.sub)
+        col.add(gameNote)
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                if (!spinnerReady) { spinnerReady = true; return }
+                if (BoostService.running) startBoost()
+            }
+            override fun onNothingSelected(p: AdapterView<*>?) {}
+        }
+        setupSpinner()
 
         val row = LinearLayout(this)
         fun tile(label: String, icon: String): TextView {
@@ -83,12 +105,15 @@ class BoostActivity : Activity() {
         gc.addView(verdictTv)
         col.add(gc, t = 10)
 
+        col.add(iconBtn("Find Best DNS", "search", true) { openScan() }, t = 12)
+        col.add(tv("همهٔ DNSها (لیست خودت + ۱۰۰۰ DNS کشورها) را امتحان می‌کند و بهترین‌ها را برای انتخاب بالا فهرست می‌کند.", 11f, T.sub), t = 4)
+
         val info = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL; background = rect(withAlpha(T.card, 235), T.stroke, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
         }
         info.add(IconView(this, "info", T.accent, 26), r = 12)
         info.add(tv("Boost چه می‌کند: ۱) هر ۲ ثانیه یک اتصال کوچک می‌زند تا مودم گوشی خواب نرود و پینگ کمتر بپرد. ۲) روی Wi-Fi حالت کم‌تأخیر را روشن می‌کند (اندروید ۱۰ به بالا). ۳) پایداری را زنده نشان می‌دهد.\n\nنمی‌تواند سرعت اینترنت را بیشتر کند یا فاصلهٔ تو تا سرور بازی را کم کند. مصرف باتری کمی بیشتر می‌شود؛ بعد از بازی خاموشش کن.", 12f, T.sub), 0, -2, weight = 1f)
-        col.add(info, t = 10)
+        col.add(info, t = 14)
 
         val fl = FrameLayout(this)
         fl.addView(GlowBg(this), FrameLayout.LayoutParams(-1, -1))
@@ -97,8 +122,36 @@ class BoostActivity : Activity() {
         refresh()
     }
 
-    override fun onResume() { super.onResume(); h.post(tick) }
-    override fun onPause() { super.onPause(); h.removeCallbacks(tick) }
+    private fun drawSeg() {
+        seg.removeAllViews()
+        listOf("Internet", "Game").forEachIndexed { i, n ->
+            val sel = i == mode
+            seg.add(tv(n, 15f, if (sel) Color.BLACK else T.sub, true).apply {
+                gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(10))
+                background = if (sel) rect(T.accent, 0, 10) else null
+                setOnClickListener { if (mode != i) { mode = i; drawSeg(); setupSpinner(); if (BoostService.running) startBoost() } }
+            }, 0, -2, weight = 1f)
+        }
+    }
+
+    private fun setupSpinner() {
+        spinnerReady = false
+        val names = if (mode == 0) netTargets.map { it.first } else gameList.map { it.name }
+        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
+        spinnerLabel.text = if (mode == 0) "فقط اینترنت خودت: سرور هدف برای پایش" else "بازی نصب‌شده روی گوشی"
+        gameNote.visibility = if (mode == 1 && noneInstalled) View.VISIBLE else View.GONE
+    }
+
+    private fun sel(): Int = spinner.selectedItemPosition.coerceAtLeast(0)
+    private fun host(): String = if (mode == 0) netTargets[sel().coerceAtMost(netTargets.size - 1)].second
+        else gameList[sel().coerceAtMost(gameList.size - 1)].hosts[0]
+
+    private fun startBoost() {
+        val i = Intent(this, BoostService::class.java).setAction(BoostService.ACTION_START)
+            .putExtra(BoostService.EXTRA_HOST, host()).putExtra(BoostService.EXTRA_PORT, 443)
+        startForegroundService(i)
+        BoostService.running = true
+    }
 
     private fun toggle() {
         if (BoostService.running) {
@@ -107,14 +160,19 @@ class BoostActivity : Activity() {
         } else {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED)
                 requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 5)
-            val t = targets[spinner.selectedItemPosition]
-            val i = Intent(this, BoostService::class.java).setAction(BoostService.ACTION_START)
-                .putExtra(BoostService.EXTRA_HOST, t.second).putExtra(BoostService.EXTRA_PORT, 443)
-            startForegroundService(i)
-            BoostService.running = true
+            startBoost()
         }
         refresh()
     }
+
+    private fun openScan() {
+        val g = if (mode == 0) Games.generic else gameList[sel().coerceAtMost(gameList.size - 1)]
+        startActivity(Intent(this, DnsScanActivity::class.java)
+            .putExtra("name", g.name).putExtra("hosts", g.hosts.toTypedArray()))
+    }
+
+    override fun onResume() { super.onResume(); h.post(tick) }
+    override fun onPause() { super.onPause(); h.removeCallbacks(tick) }
 
     private fun refresh() {
         val on = BoostService.running

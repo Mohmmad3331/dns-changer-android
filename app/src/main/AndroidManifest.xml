@@ -7,6 +7,34 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <queries>
+        <package android:name="com.HoYoverse.hkrpgoversea" />
+        <package android:name="com.activision.callofduty.shooter" />
+        <package android:name="com.activision.callofduty.warzone" />
+        <package android:name="com.axlebolt.standoff2" />
+        <package android:name="com.blizzard.wtcg.hearthstone" />
+        <package android:name="com.dts.freefiremax" />
+        <package android:name="com.dts.freefireth" />
+        <package android:name="com.ea.gp.fifamobile" />
+        <package android:name="com.innersloth.spacemafia" />
+        <package android:name="com.levelinfinite.sgameGlobal" />
+        <package android:name="com.miHoYo.GenshinImpact" />
+        <package android:name="com.miniclip.eightballpool" />
+        <package android:name="com.mobile.legends" />
+        <package android:name="com.mojang.minecraftpe" />
+        <package android:name="com.nianticlabs.pokemongo" />
+        <package android:name="com.pubg.imobile" />
+        <package android:name="com.pubg.krmobile" />
+        <package android:name="com.riotgames.league.wildrift" />
+        <package android:name="com.roblox.client" />
+        <package android:name="com.supercell.brawlstars" />
+        <package android:name="com.supercell.clashofclans" />
+        <package android:name="com.supercell.clashroyale" />
+        <package android:name="com.tencent.ig" />
+        <package android:name="com.tencent.iglite" />
+        <package android:name="com.wildlife.games.battle.royale.free.zooba" />
+        <package android:name="jp.konami.pesam" />
+    </queries>
     <application
         android:label="DNS Changer"
         android:icon="@mipmap/ic_launcher"
@@ -21,6 +49,7 @@
         </activity>
         <activity android:name=".GameTestActivity" android:exported="false" />
         <activity android:name=".BoostActivity" android:exported="false" />
+        <activity android:name=".DnsScanActivity" android:exported="false" />
         <service
             android:name=".BoostService"
             android:exported="false"
