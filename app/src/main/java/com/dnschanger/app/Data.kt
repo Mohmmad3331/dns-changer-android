@@ -1,17 +1,26 @@
 package com.dnschanger.app
 
+import android.content.Context
 import java.io.ByteArrayOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 
-data class Dns(val name: String, val p: String, val s: String, val type: String, val desc: String)
-data class Game(val name: String, val host: String)
+data class Dns(
+    val name: String, val p: String, val s: String,
+    val type: String, val desc: String, val custom: Boolean = false
+) {
+    val ips: String get() = if (s.isBlank() || s == "0.0.0.0") p else "$p  /  $s"
+}
+
+data class Game(val name: String, val hosts: List<String>)
 
 object DnsData {
-    val list = listOf(
+    val builtin = listOf(
 
         Dns("رادار بازی (Radar Game)", "10.202.10.10", "10.202.10.11", "داخلی", "بهبود اتصال، کاهش برخی مشکلات دسترسی و تست پینگ"),
         Dns("الکترو (Electro)", "78.157.42.100", "78.157.42.101", "داخلی", "همه‌کاره داخلی؛ مناسب تست فعال‌سازی گیفت کارت پلی‌استیشن"),
@@ -23,23 +32,73 @@ object DnsData {
         Dns("بگذر (Begzar)", "185.55.226.26", "185.55.225.25", "داخلی", "تست رفع برخی محدودیت‌های دسترسی"),
         Dns("کلودفلر (Cloudflare)", "1.1.1.1", "1.0.0.1", "بین‌المللی", "تست لاگین و دانلود بازی‌ها، تمرکز بر حریم خصوصی"),
         Dns("گوگل (Google Public DNS)", "8.8.8.8", "8.8.4.4", "بین‌المللی", "تست اتصال با اپراتورهای مختلف در شرایط عادی"),
-        Dns("کواد۹ (Quad9)", "9.9.9.9", "149.112.112.112", "بین‌المللی", "DNS بین‌المللی با تمرکز بر امنیت")
+        Dns("کواد۹ (Quad9)", "9.9.9.9", "149.112.112.112", "بین‌المللی", "DNS بین‌المللی با تمرکز بر امنیت"),
+        Dns("اد‌گارد (AdGuard)", "94.140.14.14", "94.140.15.15", "بین‌المللی", "DNS با مسدودسازی تبلیغات"),
+        Dns("اوپن‌دی‌ان‌اس (OpenDNS)", "208.67.222.222", "208.67.220.220", "بین‌المللی", "DNS سیسکو، پایدار و شناخته‌شده"),
+        Dns("کلین‌براوزینگ (CleanBrowsing)", "185.228.168.168", "185.228.169.168", "بین‌المللی", "DNS با فیلتر محتوا")
     )
 
     val games = listOf(
-        Game("Mobile Legends", "mobilelegends.com"),
-        Game("PUBG Mobile", "pubgmobile.com"),
-        Game("Call of Duty Mobile", "callofduty.com"),
-        Game("Free Fire", "ff.garena.com"),
-        Game("Clash of Clans / Royale", "supercell.com"),
-        Game("Brawl Stars", "brawlstars.com"),
-        Game("Genshin Impact", "hoyoverse.com"),
-        Game("Fortnite", "epicgames.com"),
-        Game("Steam", "store.steampowered.com"),
-        Game("PlayStation Network", "playstation.com"),
-        Game("اینترنت عمومی (Google)", "google.com"),
-        Game("اینترنت عمومی (Cloudflare)", "cloudflare.com")
+        Game("Mobile Legends", listOf("mobilelegends.com", "m.mobilelegends.com", "moonton.com")),
+        Game("PUBG Mobile", listOf("pubgmobile.com", "igamecj.com", "proximabeta.com")),
+        Game("Call of Duty Mobile", listOf("callofduty.com", "activision.com")),
+        Game("Free Fire", listOf("ff.garena.com", "garena.com", "freefiremobile.com")),
+        Game("Clash of Clans / Royale", listOf("supercell.com", "clashofclans.com", "clashroyale.com")),
+        Game("Brawl Stars", listOf("brawlstars.com", "supercell.com")),
+        Game("Genshin Impact", listOf("hoyoverse.com", "genshin.hoyoverse.com", "mihoyo.com")),
+        Game("Fortnite", listOf("epicgames.com", "fortnite.com")),
+        Game("Valorant / League", listOf("playvalorant.com", "leagueoflegends.com", "riotgames.com")),
+        Game("Roblox / Minecraft", listOf("roblox.com", "minecraft.net")),
+        Game("Steam / Dota 2", listOf("store.steampowered.com", "steamcommunity.com", "dota2.com")),
+        Game("PlayStation Network", listOf("playstation.com", "playstation.net")),
+        Game("اینترنت عمومی", listOf("google.com", "cloudflare.com", "youtube.com"))
     )
+}
+
+class DnsRepo(ctx: Context) {
+    private val sp = ctx.getSharedPreferences("dnsprefs", Context.MODE_PRIVATE)
+    private fun clean(s: String) = s.replace("|", " ").replace("\n", " ").trim()
+
+    fun custom(): List<Dns> = (sp.getString("custom", "") ?: "").lines().mapNotNull {
+        val p = it.split("|")
+        if (p.size >= 3) Dns(p[0], p[1], p[2], "سفارشی", "DNS افزوده‌شده توسط شما", true) else null
+    }
+
+    fun addCustom(name: String, a: String, b: String) {
+        val cur = sp.getString("custom", "") ?: ""
+        sp.edit().putString("custom", (cur + "\n" + clean(name) + "|" + clean(a) + "|" + clean(b)).trim()).apply()
+    }
+
+    fun removeCustom(name: String) {
+        val kept = (sp.getString("custom", "") ?: "").lines().filter { it.isNotBlank() && !it.startsWith("$name|") }
+        sp.edit().putString("custom", kept.joinToString("\n")).apply()
+    }
+
+    fun all(): List<Dns> = DnsData.builtin + custom()
+
+    var selected: String
+        get() = sp.getString("sel", DnsData.builtin[0].name) ?: DnsData.builtin[0].name
+        set(v) { sp.edit().putString("sel", v).apply() }
+
+    fun favs(): Set<String> = (sp.getStringSet("favs", emptySet()) ?: emptySet()).toSet()
+    fun toggleFav(n: String) {
+        val s = favs().toMutableSet()
+        if (!s.add(n)) s.remove(n)
+        sp.edit().putStringSet("favs", s).apply()
+    }
+
+    var blue: Boolean
+        get() = sp.getBoolean("blue", false)
+        set(v) { sp.edit().putBoolean("blue", v).apply() }
+    var alerts: Boolean
+        get() = sp.getBoolean("alerts", true)
+        set(v) { sp.edit().putBoolean("alerts", v).apply() }
+
+    fun hosts(): List<String> = (sp.getString("hosts", "") ?: "").lines().filter { it.isNotBlank() }
+    fun addHost(h: String) {
+        sp.edit().putString("hosts", (hosts() + clean(h)).joinToString("\n")).apply()
+    }
+    fun clearHosts() { sp.edit().putString("hosts", "").apply() }
 }
 
 object NetTest {
@@ -55,13 +114,17 @@ object NetTest {
         }
     }
 
-    /** حل نام با یک DNS مشخص. خروجی: (IP، زمان حل نام به میلی‌ثانیه) */
-    fun resolve(dns: String, host: String, timeout: Int = 2500): Pair<String, Long>? {
+    fun isIpv4(s: String) = Regex("^(\\d{1,3}\\.){3}\\d{1,3}$").matches(s) && s.split(".").all { it.toInt() in 0..255 }
+    fun isIpv6(s: String) = s.contains(":") && Regex("^[0-9a-fA-F:.]+$").matches(s)
+    fun isIp(s: String) = isIpv4(s) || isIpv6(s)
+
+    /** حل نام با یک DNS مشخص. qtype: 1 = IPv4 (A)، 28 = IPv6 (AAAA). خروجی: (IP، زمان حل نام) */
+    fun resolve(dns: String, host: String, qtype: Int = 1, timeout: Int = 2000): Pair<String, Long>? {
         return try {
             val q = ByteArrayOutputStream()
             q.write(byteArrayOf(0x12, 0x34, 0x01, 0, 0, 1, 0, 0, 0, 0, 0, 0))
             host.split(".").forEach { q.write(it.length); q.write(it.toByteArray()) }
-            q.write(0); q.write(byteArrayOf(0, 1, 0, 1))
+            q.write(0); q.write(byteArrayOf(0, qtype.toByte(), 0, 1))
             val data = q.toByteArray()
             val t = System.nanoTime()
             val buf = ByteArray(1500)
@@ -80,9 +143,10 @@ object NetTest {
                 pos = skipName(buf, pos)
                 val type = u16(buf, pos)
                 val rdlen = u16(buf, pos + 8)
-                if (type == 1 && rdlen == 4) {
-                    val ip = (0 until 4).joinToString(".") { (buf[pos + 10 + it].toInt() and 0xFF).toString() }
-                    result = Pair(ip, ms); break
+                if (type == qtype && ((qtype == 1 && rdlen == 4) || (qtype == 28 && rdlen == 16))) {
+                    val bytes = buf.copyOfRange(pos + 10, pos + 10 + rdlen)
+                    result = Pair(InetAddress.getByAddress(bytes).hostAddress ?: "", ms)
+                    break
                 }
                 pos += 10 + rdlen
             }
@@ -91,25 +155,26 @@ object NetTest {
     }
 
     /** حل نام با DNS پیش‌فرض سیستم */
-    fun resolveSystem(host: String): Pair<String, Long>? = try {
+    fun resolveSystem(host: String, v6: Boolean): Pair<String, Long>? = try {
         val t = System.nanoTime()
-        val ip = InetAddress.getAllByName(host).first { it.address.size == 4 }.hostAddress!!
-        Pair(ip, (System.nanoTime() - t) / 1_000_000)
+        val all = InetAddress.getAllByName(host)
+        val a = if (v6) all.firstOrNull { it is Inet6Address } else all.firstOrNull { it is Inet4Address }
+        if (a == null) null else Pair(a.hostAddress ?: "", (System.nanoTime() - t) / 1_000_000)
     } catch (_: Exception) { null }
 
-    /** میانگین زمان اتصال TCP (۳ بار). null = ناموفق */
-    fun tcpPing(ip: String, port: Int = 443): Long? {
+    /** میانگین زمان اتصال TCP. null = ناموفق */
+    fun tcpPing(ip: String, port: Int = 443, tries: Int = 2, timeout: Int = 1500): Long? {
         val r = mutableListOf<Long>()
-        repeat(3) {
+        repeat(tries) {
             try {
                 val t = System.nanoTime()
-                Socket().use { it.connect(InetSocketAddress(ip, port), 2000) }
+                Socket().use { it.connect(InetSocketAddress(ip, port), timeout) }
                 r.add((System.nanoTime() - t) / 1_000_000)
             } catch (_: Exception) {}
         }
         return if (r.isEmpty()) null else r.sum() / r.size
     }
 
-    fun isBogus(ip: String) = ip.startsWith("10.") || ip.startsWith("127.") ||
-        ip.startsWith("192.168.") || ip == "0.0.0.0"
+    fun isBogus(ip: String) = ip.startsWith("10.") || ip.startsWith("127.") || ip.startsWith("192.168.") ||
+        ip == "0.0.0.0" || ip == "::" || ip == "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80")
 }

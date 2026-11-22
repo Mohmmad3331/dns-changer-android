@@ -17,6 +17,8 @@ class DnsVpnService : VpnService() {
         const val ACTION_START = "start"
         const val ACTION_STOP = "stop"
         const val EXTRA_DNS1 = "dns1"
+        const val EXTRA_NAME = "name"
+        @Volatile var currentName = ""
         const val EXTRA_DNS2 = "dns2"
         @Volatile var active = false
         private const val FAKE_DNS = "10.111.222.2"
@@ -34,6 +36,7 @@ class DnsVpnService : VpnService() {
         val d1 = intent?.getStringExtra(EXTRA_DNS1) ?: return START_NOT_STICKY
         val d2 = intent.getStringExtra(EXTRA_DNS2)
         stopVpn()
+        currentName = intent.getStringExtra(EXTRA_NAME) ?: ""
         startVpn(d1, d2)
         return START_STICKY
     }
@@ -47,7 +50,7 @@ class DnsVpnService : VpnService() {
         tun = b.establish() ?: return
         running = true
         active = true
-        val servers = listOfNotNull(d1, d2).filter { it != "0.0.0.0" }
+        val servers = listOfNotNull(d1, d2).filter { it.isNotBlank() && it != "0.0.0.0" }
         worker = Thread { loop(servers) }.also { it.start() }
     }
 
