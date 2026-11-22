@@ -94,6 +94,10 @@ class DnsRepo(ctx: Context) {
         get() = sp.getBoolean("alerts", true)
         set(v) { sp.edit().putBoolean("alerts", v).apply() }
 
+    var notif: Boolean
+        get() = sp.getBoolean("notif", true)
+        set(v) { sp.edit().putBoolean("notif", v).apply() }
+
     fun hosts(): List<String> = (sp.getString("hosts", "") ?: "").lines().filter { it.isNotBlank() }
     fun addHost(h: String) {
         sp.edit().putString("hosts", (hosts() + clean(h)).joinToString("\n")).apply()

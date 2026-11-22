@@ -27,13 +27,12 @@ class GameTestActivity : Activity() {
         super.onCreate(b)
         repo = DnsRepo(this)
         T.accent = Color.parseColor(if (repo.blue) "#4DA3FF" else "#FFC21A")
-        window.decorView.layoutDirection = View.LAYOUT_DIRECTION_RTL
         window.statusBarColor = T.bg
         window.navigationBarColor = T.bg
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setBackgroundColor(T.bg); setPadding(dp(14), dp(18), dp(14), dp(10))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(18), dp(14), dp(10))
         }
-        root.add(tv("تست بازی‌ها (IPv4 / IPv6)", 20f, T.text, true).apply { gravity = Gravity.CENTER })
+        root.add(tv("Games Test  (IPv4 / IPv6)", 20f, T.text, true).apply { gravity = Gravity.CENTER })
         root.add(tv("بازی و DNS را انتخاب کن. برنامه برای هر دامنه، هم IPv4 و هم IPv6 را می‌سنجد و می‌گوید کدام بهتر است.", 12f, T.sub), t = 6, b = 6)
 
         gameSp = Spinner(this)
@@ -49,7 +48,10 @@ class GameTestActivity : Activity() {
         box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.add(ScrollView(this).apply { addView(box) }, -1, 0, weight = 1f)
         root.add(tv("توجه: آدرس سرور مچ هر بازی هنگام بازی تعیین می‌شود و ثابت نیست. این تست دامنه‌های ورود و سرویس بازی را می‌سنجد (TCP پورت ۴۴۳). اگر آدرس سرور مچ را می‌دانی، با «افزودن دامنه / سرور دلخواه» (به شکل host یا ip:port) تست کن. ✗ در IPv6 یعنی شبکهٔ تو IPv6 ندارد.", 11f, T.sub), t = 6)
-        setContentView(root)
+        val fl = FrameLayout(this)
+        fl.addView(GlowBg(this), FrameLayout.LayoutParams(-1, -1))
+        fl.addView(root, FrameLayout.LayoutParams(-1, -1))
+        setContentView(fl)
     }
 
     private fun refreshSpinners() {
