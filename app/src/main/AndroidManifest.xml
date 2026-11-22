@@ -50,6 +50,7 @@
         <activity android:name=".GameTestActivity" android:exported="false" />
         <activity android:name=".BoostActivity" android:exported="false" />
         <activity android:name=".DnsScanActivity" android:exported="false" />
+        <activity android:name=".WorldDnsActivity" android:exported="false" />
         <service
             android:name=".BoostService"
             android:exported="false"
