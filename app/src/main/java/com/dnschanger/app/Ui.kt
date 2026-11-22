@@ -412,3 +412,34 @@ class GaugeView(c: Context) : View(c) {
         cv.drawText(label, cx, cy + r * 1.0f, p)
     }
 }
+
+class GraphView(c: Context) : View(c) {
+    private var data: List<Long> = emptyList()
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    fun setData(d: List<Long>) { data = d; invalidate() }
+
+    override fun onDraw(cv: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        p.style = Paint.Style.STROKE; p.strokeWidth = 1f; p.color = T.stroke
+        for (i in 1..3) cv.drawLine(0f, h * i / 4, w, h * i / 4, p)
+        if (data.size < 2) return
+        val maxV = maxOf(100L, data.maxOrNull() ?: 100L).toFloat()
+        val step = w / 89f
+        val x0 = w - (data.size - 1) * step
+        val path = Path()
+        var pen = false
+        data.forEachIndexed { i, v ->
+            val x = x0 + i * step
+            if (v < 0) {
+                pen = false
+                p.color = T.bad; p.strokeWidth = context.dpf(2f)
+                cv.drawLine(x, h * 0.75f, x, h, p)
+            } else {
+                val y = h - (v / maxV).coerceIn(0f, 1f) * (h - context.dpf(6f)) - context.dpf(3f)
+                if (!pen) { path.moveTo(x, y); pen = true } else path.lineTo(x, y)
+            }
+        }
+        p.color = T.accent; p.strokeWidth = context.dpf(2.4f); p.strokeCap = Paint.Cap.ROUND; p.strokeJoin = Paint.Join.ROUND
+        cv.drawPath(path, p)
+    }
+}
