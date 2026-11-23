@@ -248,17 +248,73 @@ class IconView(c: Context, var kind: String, var color: Int, private val sizeDp:
     override fun onDraw(cv: Canvas) { Icons.draw(cv, kind, width / 2f, height / 2f, width * 0.38f, color) }
 }
 
-class LogoView(c: Context, private val letter: String, private val color: Int, private val sizeDp: Int = 42) : View(c) {
+class LogoView(c: Context, private val letter: String, private val color: Int, private val sizeDp: Int = 42, private val key: String = "") : View(c) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     override fun onMeasure(w: Int, h: Int) { val s = context.dp(sizeDp); setMeasuredDimension(s, s) }
     override fun onDraw(cv: Canvas) {
-        val r = width / 2f
-        p.color = color; p.style = Paint.Style.FILL
-        cv.drawCircle(r, r, r, p)
-        p.color = Color.WHITE; p.typeface = Typeface.DEFAULT_BOLD; p.textAlign = Paint.Align.CENTER; p.textSize = r * 1.05f
-        cv.drawText(letter, r, r + p.textSize * 0.35f, p)
+        val s = width.toFloat()
+        val r = s / 2
+        val k = key.lowercase()
+        p.reset(); p.isAntiAlias = true; p.style = Paint.Style.FILL
+        when {
+            "cloudflare" in k -> {
+                p.color = Color.parseColor("#F6821F")
+                cv.drawCircle(s * 0.30f, s * 0.62f, s * 0.17f, p)
+                cv.drawCircle(s * 0.50f, s * 0.44f, s * 0.24f, p)
+                cv.drawCircle(s * 0.72f, s * 0.60f, s * 0.19f, p)
+                cv.drawRoundRect(RectF(s * 0.13f, s * 0.58f, s * 0.91f, s * 0.80f), s * 0.1f, s * 0.1f, p)
+            }
+            "google" in k -> {
+                p.style = Paint.Style.STROKE; p.strokeWidth = s * 0.16f
+                val rc = RectF(s * 0.2f, s * 0.2f, s * 0.8f, s * 0.8f)
+                p.color = Color.parseColor("#EA4335"); cv.drawArc(rc, 210f, 100f, false, p)
+                p.color = Color.parseColor("#FBBC05"); cv.drawArc(rc, 130f, 80f, false, p)
+                p.color = Color.parseColor("#34A853"); cv.drawArc(rc, 50f, 80f, false, p)
+                p.color = Color.parseColor("#4285F4"); cv.drawArc(rc, 340f, 70f, false, p)
+                cv.drawLine(s * 0.5f, s * 0.5f, s * 0.8f, s * 0.5f, p)
+            }
+            "quad9" in k -> {
+                p.color = Color.parseColor("#E5397A")
+                for (i in 0 until 8) {
+                    val a = Math.toRadians(i * 45.0)
+                    cv.drawCircle((r + Math.cos(a) * s * 0.27).toFloat(), (r + Math.sin(a) * s * 0.27).toFloat(), s * 0.12f, p)
+                }
+                p.color = Color.parseColor("#F7A1C0"); cv.drawCircle(r, r, s * 0.12f, p)
+            }
+            "adguard" in k -> {
+                val path = Path()
+                path.moveTo(r, s * 0.08f); path.lineTo(s * 0.88f, s * 0.24f); path.lineTo(s * 0.88f, s * 0.55f)
+                path.quadTo(s * 0.88f, s * 0.82f, r, s * 0.94f); path.quadTo(s * 0.12f, s * 0.82f, s * 0.12f, s * 0.55f)
+                path.lineTo(s * 0.12f, s * 0.24f); path.close()
+                p.color = Color.parseColor("#2FBF71"); cv.drawPath(path, p)
+                p.style = Paint.Style.STROKE; p.strokeWidth = s * 0.08f; p.strokeCap = Paint.Cap.ROUND; p.strokeJoin = Paint.Join.ROUND
+                p.color = Color.WHITE
+                val ck = Path(); ck.moveTo(s * 0.32f, s * 0.5f); ck.lineTo(s * 0.46f, s * 0.64f); ck.lineTo(s * 0.70f, s * 0.36f)
+                cv.drawPath(ck, p)
+            }
+            "opendns" in k -> {
+                p.color = Color.parseColor("#FF6A00")
+                cv.drawRoundRect(RectF(0f, 0f, s, s), s * 0.22f, s * 0.22f, p)
+                p.style = Paint.Style.STROKE; p.strokeWidth = s * 0.11f; p.color = Color.WHITE
+                cv.drawOval(RectF(s * 0.32f, s * 0.2f, s * 0.68f, s * 0.8f), p)
+            }
+            "cleanbrowsing" in k -> {
+                p.color = Color.parseColor("#2D9CDB"); cv.drawCircle(r, r, r, p)
+                p.style = Paint.Style.STROKE; p.strokeWidth = s * 0.09f; p.strokeCap = Paint.Cap.ROUND; p.color = Color.WHITE
+                cv.drawArc(RectF(s * 0.2f, s * 0.2f, s * 0.8f, s * 0.8f), 30f, 250f, false, p)
+                cv.drawArc(RectF(s * 0.36f, s * 0.36f, s * 0.64f, s * 0.64f), 200f, 250f, false, p)
+            }
+            else -> {
+                p.color = color
+                cv.drawCircle(r, r, r, p)
+                p.color = Color.WHITE; p.typeface = Typeface.DEFAULT_BOLD; p.textAlign = Paint.Align.CENTER; p.textSize = r * 1.05f
+                cv.drawText(letter, r, r + p.textSize * 0.35f, p)
+            }
+        }
     }
 }
+
+fun Context.logo(name: String, size: Int): View = LogoView(this, brandLetter(name), brandColor(name), size, name)
 
 class BarsView(c: Context, private val ms: Long) : View(c) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)

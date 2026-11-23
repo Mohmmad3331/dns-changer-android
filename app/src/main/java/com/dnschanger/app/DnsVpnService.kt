@@ -87,6 +87,10 @@ class DnsVpnService : VpnService() {
         var answer: ByteArray? = null
         for (s in servers) {
             try {
+                if (Upstream.isEncrypted(s)) {
+                    answer = Upstream.exchange(s, query, 4000) { protect(it) }
+                    if (answer != null) break else continue
+                }
                 DatagramSocket().use { sock ->
                     protect(sock)
                     sock.soTimeout = 3000

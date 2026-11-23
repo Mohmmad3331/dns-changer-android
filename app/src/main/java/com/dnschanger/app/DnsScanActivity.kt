@@ -68,7 +68,7 @@ class DnsScanActivity : Activity() {
     private fun candidates(): List<Cand> {
         val out = ArrayList<Cand>()
         val seen = HashSet<String>()
-        repo.all().forEach { d -> if (seen.add(d.p)) out.add(Cand(d.name, d.p, "لیست من")) }
+        repo.all().forEach { d -> if (seen.add(d.p)) out.add(Cand(d.title, d.p, "لیست من")) }
         try {
             assets.open("world_dns.csv").bufferedReader().useLines { ls ->
                 ls.forEach { l ->

@@ -103,9 +103,9 @@ class MainActivity : Activity() {
         col.add(tv(if (on) "Using ${DnsVpnService.currentName.ifBlank { d.name }}" else "برای اتصال دکمه را لمس کن", 13f, T.sub).apply { gravity = Gravity.CENTER })
 
         val c = card().apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setOnClickListener { show(2) } }
-        c.add(LogoView(this, brandLetter(d.name), brandColor(d.name), 44), r = 12)
+        c.add(logo(d.name, 44), r = 12)
         val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        tx.addView(tv(d.name, 16f, T.text, true))
+        tx.addView(tv(d.title, 16f, T.text, true))
         tx.addView(tv(d.ips, 13f, T.sub).apply { textDirection = View.TEXT_DIRECTION_LTR; gravity = Gravity.START })
         c.add(tx, 0, -2, weight = 1f)
         c.add(IconView(this, "chev", T.text, 22), -2, -2)
@@ -142,7 +142,8 @@ class MainActivity : Activity() {
         col.add(iconBtn("Game Boost", "bolt", true) { startActivity(Intent(this, BoostActivity::class.java)) }, t = 10)
 
         Thread {
-            val ms = NetTest.tcpPing(d.p, 53)
+            val pt = d.pingTarget()
+            val ms = NetTest.tcpPing(pt.first, pt.second)
             runOnUiThread { pingTv.text = if (ms == null) "—" else "$ms ms" }
         }.start()
         if (on) Thread {
@@ -219,8 +220,8 @@ class MainActivity : Activity() {
         val sorted = repo.all().sortedWith(compareBy<Dns>({ val m = speed[it.name]; if (m == null) 2 else if (m < 0) 1 else 0 }, { speed[it.name] ?: 0L }))
         sorted.forEach { d ->
             val r = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(8)) }
-            r.add(LogoView(this, brandLetter(d.name), brandColor(d.name), 34), r = 12)
-            r.add(tv(d.name, 15f, T.text, true), 0, -2, weight = 1f)
+            r.add(logo(d.name, 34), r = 12)
+            r.add(tv(d.title, 15f, T.text, true), 0, -2, weight = 1f)
             val ms = speed[d.name]
             when {
                 ms == null -> r.add(tv(if (speedBusy) "…" else "—", 14f, T.sub), -2, -2)
@@ -304,9 +305,9 @@ class MainActivity : Activity() {
                         true
                     }
                 }
-                row.add(LogoView(this, brandLetter(d.name), brandColor(d.name), 44), r = 12)
+                row.add(logo(d.name, 44), r = 12)
                 val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                tx.addView(tv(d.name, 16f, T.text, true))
+                tx.addView(tv(d.title, 16f, T.text, true))
                 tx.addView(tv(d.ips, 12f, T.sub).apply { textDirection = View.TEXT_DIRECTION_LTR; gravity = Gravity.START })
                 row.add(tx, 0, -2, weight = 1f)
                 row.add(IconView(this, if (d.name in favs) "starf" else "star", T.accent, 28).apply {
@@ -341,44 +342,98 @@ class MainActivity : Activity() {
         return Pair(r, e)
     }
 
+    private var addMode = 0
+
     private fun addView(): View {
+        addMode = 0
         val (sc, col) = page()
         col.add(header("Add Custom DNS", "back") { show(2) })
         val seg = LinearLayout(this).apply { background = rect(withAlpha(T.card, 235), T.stroke, 14); setPadding(dp(4), dp(4), dp(4), dp(4)) }
-        listOf("UDP", "DoH", "DoT").forEachIndexed { i, n ->
-            val sel = i == 0
-            seg.add(tv(n, 15f, if (sel) Color.BLACK else T.sub, true).apply {
-                gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(10))
-                background = if (sel) rect(T.accent, 0, 10) else null
-                if (!sel) setOnClickListener { toast("DoH و DoT فعلاً پشتیبانی نمی‌شود؛ فقط UDP") }
-            }, 0, -2, weight = 1f)
-        }
         col.add(seg, t = 8)
-        col.add(tv("Server Address", 15f, T.text, true), t = 18, b = 6)
-        val (r1, a1) = fieldRow("server", "e.g. 1.1.1.1  یا  2606:4700:4700::1111", true)
-        col.add(r1)
-        col.add(tv("Secondary Address (Optional)", 15f, T.text, true), t = 14, b = 6)
-        val (r2, a2) = fieldRow("server", "e.g. 1.0.0.1", true)
-        col.add(r2)
-        col.add(tv("Name (Optional)", 15f, T.text, true), t = 14, b = 6)
-        val (r3, nm) = fieldRow("tag", "e.g. My DNS", false)
-        col.add(r3)
-        col.add(iconBtn("Add DNS", "plus", true) {
-            val p = a1.text.toString().trim()
-            val s = a2.text.toString().trim()
-            if (!NetTest.isIp(p) || (s.isNotEmpty() && !NetTest.isIp(s))) toast("آدرس IP نامعتبر است")
-            else {
-                val name = nm.text.toString().trim().ifEmpty { p }
-                if (repo.all().any { it.name == name }) toast("این نام قبلاً وجود دارد")
-                else { repo.addCustom(name, p, s); repo.selected = name; toast("اضافه شد"); show(2) }
+        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.add(form)
+
+        fun fill() {
+            seg.removeAllViews()
+            listOf("UDP", "DoH", "DoT").forEachIndexed { i, n ->
+                val sel = i == addMode
+                seg.add(tv(n, 15f, if (sel) Color.BLACK else T.sub, true).apply {
+                    gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(10))
+                    background = if (sel) rect(T.accent, 0, 10) else null
+                    setOnClickListener { addMode = i; fill() }
+                }, 0, -2, weight = 1f)
             }
-        }, t = 22)
-        val info = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL; background = rect(withAlpha(T.card, 235), T.stroke, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
+            form.removeAllViews()
+            val l1 = when (addMode) { 0 -> "Server Address"; 1 -> "DoH URL"; else -> "DoT Hostname" }
+            val h1 = when (addMode) { 0 -> "e.g. 1.1.1.1  یا  2606:4700:4700::1111"; 1 -> "https://dns.example.com/dns-query"; else -> "dns.example.com  یا  1.1.1.1" }
+            val l2 = if (addMode == 0) "Secondary Address (Optional)" else "Bootstrap IP (Optional)"
+            val h2 = if (addMode == 0) "e.g. 1.0.0.1" else "e.g. 1.1.1.1"
+            form.add(tv(l1, 15f, T.text, true), t = 18, b = 6)
+            val (r1, a1) = fieldRow("server", h1, true)
+            form.add(r1)
+            form.add(tv(l2, 15f, T.text, true), t = 14, b = 6)
+            val (r2, a2) = fieldRow("server", h2, true)
+            form.add(r2)
+            form.add(tv("Name (Optional)", 15f, T.text, true), t = 14, b = 6)
+            val (r3, nm) = fieldRow("tag", "e.g. My DNS", false)
+            form.add(r3)
+
+            // خروجی: (spec اصلی، spec دوم، نام پیش‌فرض) یا null
+            fun build(): Triple<String, String, String>? {
+                val v1 = a1.text.toString().trim()
+                val v2 = a2.text.toString().trim()
+                when (addMode) {
+                    0 -> {
+                        if (!NetTest.isIp(v1) || (v2.isNotEmpty() && !NetTest.isIp(v2))) { toast("آدرس IP نامعتبر است"); return null }
+                        return Triple(v1, v2, v1)
+                    }
+                    1 -> {
+                        val host = try { java.net.URI(v1).host } catch (_: Exception) { null }
+                        if (!v1.startsWith("https://") || host == null) { toast("آدرس DoH باید با https:// شروع شود"); return null }
+                        if (v2.isNotEmpty() && !NetTest.isIp(v2)) { toast("Bootstrap IP نامعتبر است"); return null }
+                        return Triple(v1 + (if (v2.isNotEmpty()) "#$v2" else ""), "", host)
+                    }
+                    else -> {
+                        val hp = v1.removePrefix("tls://")
+                        val host = hp.substringBefore(':')
+                        if (!Regex("^[A-Za-z0-9.-]+(:\\d+)?$").matches(hp) || host.isEmpty()) { toast("نام دامنهٔ DoT نامعتبر است"); return null }
+                        if (v2.isNotEmpty() && !NetTest.isIp(v2)) { toast("Bootstrap IP نامعتبر است"); return null }
+                        return Triple("tls://" + hp + (if (v2.isNotEmpty()) "#$v2" else ""), "", host)
+                    }
+                }
+            }
+
+            form.add(iconBtn("Test", "bolt", false) {
+                val b = build()
+                if (b != null) {
+                    toast("در حال تست...")
+                    Thread {
+                        val r = NetTest.resolve(b.first, "google.com", 1, 5000)
+                        runOnUiThread { toast(if (r != null) "✓ جواب داد (${r.second} ms)" else "✗ جواب نداد؛ آدرس یا اینترنت را بررسی کن") }
+                    }.start()
+                }
+            }, t = 18)
+            form.add(iconBtn("Add DNS", "plus", true) {
+                val b = build()
+                if (b != null) {
+                    val name = nm.text.toString().trim().ifEmpty { b.third }
+                    if (repo.all().any { it.name == name }) toast("این نام قبلاً وجود دارد")
+                    else { repo.addCustom(name, b.first, b.second); repo.selected = name; toast("اضافه شد"); show(2) }
+                }
+            }, t = 10)
+            val info = LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL; background = rect(withAlpha(T.card, 235), T.stroke, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
+            }
+            info.add(IconView(this, "info", T.accent, 26), r = 12)
+            val tip = when (addMode) {
+                0 -> "آدرس IP (IPv4 یا IPv6) وارد کن؛ DNS معمولی روی پورت ۵۳."
+                1 -> "آدرس کامل DoH با https:// وارد کن. اگر اسم دامنه حل نشد، IP سرور را در Bootstrap بنویس."
+                else -> "نام دامنهٔ سرور DoT را وارد کن (پورت ۸۵۳). اگر حل نشد، IP سرور را در Bootstrap بنویس."
+            }
+            info.add(tv(tip, 12f, T.sub), 0, -2, weight = 1f)
+            form.add(info, t = 14)
         }
-        info.add(IconView(this, "info", T.accent, 26), r = 12)
-        info.add(tv("آدرس IP (IPv4 یا IPv6) وارد کن. فقط DNS معمولی (UDP پورت ۵۳) پشتیبانی می‌شود.", 12f, T.sub), 0, -2, weight = 1f)
-        col.add(info, t = 14)
+        fill()
         return sc
     }
 
@@ -441,7 +496,7 @@ class MainActivity : Activity() {
             setOnClickListener {
                 AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("DNS Changer")
-                    .setMessage("نسخه 1.6\nتغییر DNS با VPN محلی، تست سرعت DNS و تست پینگ بازی‌ها با IPv4 و IPv6.")
+                    .setMessage("نسخه 1.7\nتغییر DNS با VPN محلی، تست سرعت DNS و تست پینگ بازی‌ها با IPv4 و IPv6.")
                     .setPositiveButton("باشه", null).show()
             }
         }
@@ -450,7 +505,7 @@ class MainActivity : Activity() {
         }
         foot.add(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }, 44, 44, r = 12)
         val ft = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        ft.addView(tv("DNS Changer", 16f, T.text, true)); ft.addView(tv("v1.6", 12f, T.sub))
+        ft.addView(tv("DNS Changer", 16f, T.text, true)); ft.addView(tv("v1.7", 12f, T.sub))
         foot.add(ft, -2, -2)
         col.add(foot, t = 16)
         return sc

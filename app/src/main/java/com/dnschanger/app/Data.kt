@@ -9,12 +9,40 @@ import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.URI
+import java.io.DataInputStream
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLPeerUnverifiedException
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLSocketFactory
 
 data class Dns(
     val name: String, val p: String, val s: String,
     val type: String, val desc: String, val custom: Boolean = false
 ) {
     val ips: String get() = if (s.isBlank() || s == "0.0.0.0") p else "$p  /  $s"
+
+    /** نام کوتاه انگلیسی برای نمایش (مثل Cloudflare) */
+    val title: String get() {
+        if (name.any { it.code in 0x0600..0x06FF }) {
+            val m = Regex("\\(([^)]+)\\)").find(name)
+            if (m != null && m.groupValues[1].any { it in 'A'..'Z' || it in 'a'..'z' }) return m.groupValues[1]
+        }
+        return name
+    }
+
+    /** آدرس و پورت برای سنجش پینگ */
+    fun pingTarget(): Pair<String, Int> {
+        val boot = p.substringAfter('#', "")
+        val main = p.substringBefore('#')
+        return when {
+            main.startsWith("https://") ->
+                Pair(if (boot.isNotBlank()) boot else (try { URI(main).host } catch (_: Exception) { null } ?: main), 443)
+            main.startsWith("tls://") ->
+                Pair(if (boot.isNotBlank()) boot else main.removePrefix("tls://").substringBefore(':').substringBefore('/'), 853)
+            else -> Pair(p, 53)
+        }
+    }
 }
 
 data class Game(val name: String, val hosts: List<String>)
@@ -54,7 +82,14 @@ object DnsData {
         Dns("مولواد (Mullvad)", "194.242.2.2", "", "بین‌المللی", "حریم خصوصی، بدون لاگ"),
         Dns("کلودفلر IPv6 (Cloudflare IPv6)", "2606:4700:4700::1111", "2606:4700:4700::1001", "IPv6", "فقط اگر شبکه‌ات IPv6 دارد"),
         Dns("گوگل IPv6 (Google IPv6)", "2001:4860:4860::8888", "2001:4860:4860::8844", "IPv6", "فقط اگر شبکه‌ات IPv6 دارد"),
-        Dns("کواد۹ IPv6 (Quad9 IPv6)", "2620:fe::fe", "2620:fe::9", "IPv6", "فقط اگر شبکه‌ات IPv6 دارد")
+        Dns("کواد۹ IPv6 (Quad9 IPv6)", "2620:fe::fe", "2620:fe::9", "IPv6", "فقط اگر شبکه‌ات IPv6 دارد"),
+        Dns("کلودفلر DoH (Cloudflare DoH)", "https://cloudflare-dns.com/dns-query", "", "DoH", "DNS رمزنگاری‌شده روی HTTPS"),
+        Dns("گوگل DoH (Google DoH)", "https://dns.google/dns-query", "", "DoH", "DNS رمزنگاری‌شده روی HTTPS"),
+        Dns("کواد۹ DoH (Quad9 DoH)", "https://dns.quad9.net/dns-query", "", "DoH", "DNS رمزنگاری‌شده روی HTTPS"),
+        Dns("اد‌گارد DoH (AdGuard DoH)", "https://dns.adguard-dns.com/dns-query", "", "DoH", "DNS رمزنگاری‌شده روی HTTPS"),
+        Dns("کلودفلر DoT (Cloudflare DoT)", "tls://one.one.one.one", "", "DoT", "DNS رمزنگاری‌شده روی TLS"),
+        Dns("گوگل DoT (Google DoT)", "tls://dns.google", "", "DoT", "DNS رمزنگاری‌شده روی TLS"),
+        Dns("کواد۹ DoT (Quad9 DoT)", "tls://dns.quad9.net", "", "DoT", "DNS رمزنگاری‌شده روی TLS")
     )
 
     val games = listOf(
@@ -80,7 +115,7 @@ class DnsRepo(ctx: Context) {
 
     fun custom(): List<Dns> = (sp.getString("custom", "") ?: "").lines().mapNotNull {
         val p = it.split("|")
-        if (p.size >= 3) Dns(p[0], p[1], p[2], "سفارشی", "DNS افزوده‌شده توسط شما", true) else null
+        if (p.size >= 3) Dns(p[0], p[1], p[2], if (p[1].startsWith("https://")) "DoH" else if (p[1].startsWith("tls://")) "DoT" else "سفارشی", "DNS افزوده‌شده توسط شما", true) else null
     }
 
     fun addCustom(name: String, a: String, b: String) {
@@ -141,7 +176,7 @@ object NetTest {
     fun isIpv6(s: String) = s.contains(":") && Regex("^[0-9a-fA-F:.]+$").matches(s)
     fun isIp(s: String) = isIpv4(s) || isIpv6(s)
 
-    /** حل نام با یک DNS مشخص. qtype: 1 = IPv4 (A)، 28 = IPv6 (AAAA). خروجی: (IP، زمان حل نام) */
+    /** حل نام با یک DNS مشخص (IP برای UDP، https://... برای DoH، tls://... برای DoT). qtype: 1=A، 28=AAAA */
     fun resolve(dns: String, host: String, qtype: Int = 1, timeout: Int = 2000): Pair<String, Long>? {
         return try {
             val q = ByteArrayOutputStream()
@@ -150,11 +185,17 @@ object NetTest {
             q.write(0); q.write(byteArrayOf(0, qtype.toByte(), 0, 1))
             val data = q.toByteArray()
             val t = System.nanoTime()
-            val buf = ByteArray(1500)
-            DatagramSocket().use { s ->
-                s.soTimeout = timeout
-                s.send(DatagramPacket(data, data.size, InetAddress.getByName(dns), 53))
-                s.receive(DatagramPacket(buf, buf.size))
+            val buf: ByteArray
+            if (Upstream.isEncrypted(dns)) {
+                buf = Upstream.exchange(dns, data, timeout + 2000, null) ?: return null
+            } else {
+                val b = ByteArray(1500)
+                DatagramSocket().use { s ->
+                    s.soTimeout = timeout
+                    s.send(DatagramPacket(data, data.size, InetAddress.getByName(dns), 53))
+                    s.receive(DatagramPacket(b, b.size))
+                }
+                buf = b
             }
             val ms = (System.nanoTime() - t) / 1_000_000
             var pos = 12
@@ -200,4 +241,114 @@ object NetTest {
 
     fun isBogus(ip: String) = ip.startsWith("10.") || ip.startsWith("127.") || ip.startsWith("192.168.") ||
         ip == "0.0.0.0" || ip == "::" || ip == "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80")
+}
+
+
+/** ارتباط با DNS رمزنگاری‌شده: DoH (HTTP/1.1 روی TLS) و DoT (TLS پورت ۸۵۳) */
+object Upstream {
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
+    private val bootstrap = listOf("8.8.8.8", "1.1.1.1", "9.9.9.9", "78.157.42.100", "178.22.122.100")
+
+    fun isEncrypted(spec: String) = spec.startsWith("https://") || spec.startsWith("tls://")
+
+    /** آدرس IP سرور DoH/DoT را بدون عبور از DNS خود برنامه پیدا می‌کند */
+    private fun hostIp(host: String, hint: String): String? {
+        if (hint.isNotBlank()) return hint
+        if (NetTest.isIp(host)) return host
+        val c = cache[host]
+        if (c != null && System.currentTimeMillis() - c.second < 300_000) return c.first
+        for (b in bootstrap) {
+            val r = NetTest.resolve(b, host, 1, 1500)
+            if (r != null && !NetTest.isBogus(r.first)) {
+                cache[host] = Pair(r.first, System.currentTimeMillis())
+                return r.first
+            }
+        }
+        return try { InetAddress.getByName(host).hostAddress } catch (_: Exception) { null }
+    }
+
+    private fun openTls(host: String, ip: String, port: Int, timeout: Int, protect: ((Socket) -> Unit)?): SSLSocket {
+        val raw = Socket()
+        protect?.invoke(raw)
+        raw.connect(InetSocketAddress(ip, port), timeout)
+        raw.soTimeout = timeout
+        val ss = SSLSocketFactory.getDefault().createSocket(raw, host, port, true) as SSLSocket
+        ss.startHandshake()
+        if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(host, ss.session)) {
+            ss.close(); throw SSLPeerUnverifiedException("hostname mismatch")
+        }
+        return ss
+    }
+
+    /** spec: https://host/path[#bootstrapIP]  یا  tls://host[:port][#bootstrapIP] */
+    fun exchange(spec: String, q: ByteArray, timeout: Int = 3000, protect: ((Socket) -> Unit)? = null): ByteArray? {
+        return try {
+            val hint = spec.substringAfter('#', "")
+            val main = spec.substringBefore('#')
+            if (main.startsWith("tls://")) {
+                val hp = main.removePrefix("tls://")
+                val host = hp.substringBefore(':').substringBefore('/')
+                val port = if (hp.contains(':')) (hp.substringAfter(':').substringBefore('/').toIntOrNull() ?: 853) else 853
+                val ip = hostIp(host, hint) ?: return null
+                openTls(host, ip, port, timeout, protect).use { s ->
+                    val o = s.outputStream
+                    o.write(byteArrayOf((q.size shr 8).toByte(), q.size.toByte()))
+                    o.write(q); o.flush()
+                    val inp = DataInputStream(s.inputStream)
+                    val len = inp.readUnsignedShort()
+                    val r = ByteArray(len)
+                    inp.readFully(r)
+                    r
+                }
+            } else {
+                val u = URI(main)
+                val host = u.host ?: return null
+                val port = if (u.port > 0) u.port else 443
+                var path = u.rawPath ?: ""
+                if (path.isEmpty()) path = "/dns-query"
+                if (u.rawQuery != null) path += "?" + u.rawQuery
+                val ip = hostIp(host, hint) ?: return null
+                openTls(host, ip, port, timeout, protect).use { s ->
+                    val req = "POST $path HTTP/1.1\r\nHost: $host\r\nUser-Agent: DNSChanger\r\n" +
+                        "Accept: application/dns-message\r\nContent-Type: application/dns-message\r\n" +
+                        "Content-Length: ${q.size}\r\nConnection: close\r\n\r\n"
+                    val o = s.outputStream
+                    o.write(req.toByteArray(Charsets.ISO_8859_1))
+                    o.write(q); o.flush()
+                    parseHttp(s.inputStream.readBytes())
+                }
+            }
+        } catch (_: Exception) { null }
+    }
+
+    private fun parseHttp(b: ByteArray): ByteArray? {
+        var idx = -1
+        for (i in 0 until b.size - 3) {
+            if (b[i] == 13.toByte() && b[i + 1] == 10.toByte() && b[i + 2] == 13.toByte() && b[i + 3] == 10.toByte()) { idx = i; break }
+        }
+        if (idx < 0) return null
+        val head = String(b, 0, idx, Charsets.ISO_8859_1)
+        val status = head.lineSequence().first().split(" ").getOrNull(1)
+        if (status != "200") return null
+        var body = b.copyOfRange(idx + 4, b.size)
+        if (head.contains("transfer-encoding: chunked", true)) body = dechunk(body)
+        return body
+    }
+
+    private fun dechunk(b: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        var i = 0
+        while (i < b.size) {
+            var j = i
+            while (j + 1 < b.size && !(b[j] == 13.toByte() && b[j + 1] == 10.toByte())) j++
+            if (j + 1 >= b.size) break
+            val size = String(b, i, j - i, Charsets.ISO_8859_1).trim().substringBefore(';').toIntOrNull(16) ?: break
+            if (size == 0) break
+            i = j + 2
+            if (i + size > b.size) { out.write(b, i, b.size - i); break }
+            out.write(b, i, size)
+            i += size + 2
+        }
+        return out.toByteArray()
+    }
 }
