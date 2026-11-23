@@ -272,7 +272,7 @@ object Upstream {
         protect?.invoke(raw)
         raw.connect(InetSocketAddress(ip, port), timeout)
         raw.soTimeout = timeout
-        val ss = SSLSocketFactory.getDefault().createSocket(raw, host, port, true) as SSLSocket
+        val ss = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(raw, host, port, true) as SSLSocket
         ss.startHandshake()
         if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(host, ss.session)) {
             ss.close(); throw SSLPeerUnverifiedException("hostname mismatch")
