@@ -1,6 +1,13 @@
 package com.dnschanger.app
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
+import android.os.Build
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import java.io.FileInputStream
@@ -22,6 +29,7 @@ class DnsVpnService : VpnService() {
         const val EXTRA_DNS2 = "dns2"
         @Volatile var active = false
         private const val FAKE_DNS = "10.111.222.2"
+        private const val NOTIF_ID = 55
     }
 
     private var tun: ParcelFileDescriptor? = null
@@ -50,6 +58,8 @@ class DnsVpnService : VpnService() {
         tun = b.establish() ?: return
         running = true
         active = true
+        showNotif()
+        DnsWidget.refresh(this)
         val servers = listOfNotNull(d1, d2).filter { it.isNotBlank() && it != "0.0.0.0" }
         worker = Thread { loop(servers) }.also { it.start() }
     }
@@ -59,6 +69,34 @@ class DnsVpnService : VpnService() {
         active = false
         try { tun?.close() } catch (_: Exception) {}
         tun = null
+        try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID) } catch (_: Exception) {}
+        DnsWidget.refresh(this)
+    }
+
+    /** اعلان دائمی با دکمهٔ «قطع اتصال» تا وقتی DNS وصل است */
+    private fun showNotif() {
+        if (!DnsRepo(this).notif) return
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            val open = PendingIntent.getActivity(this, 10, Intent(this, MainActivity::class.java), flags)
+            val stop = PendingIntent.getService(this, 11, Intent(this, DnsVpnService::class.java).setAction(ACTION_STOP), flags)
+            val b = if (Build.VERSION.SDK_INT >= 26) {
+                nm.createNotificationChannel(NotificationChannel("vpn", "DNS Connection", NotificationManager.IMPORTANCE_LOW))
+                Notification.Builder(this, "vpn")
+            } else {
+                @Suppress("DEPRECATION") Notification.Builder(this)
+            }
+            val act = Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel), "قطع اتصال", stop).build()
+            val n = b.setContentTitle("DNS Changer متصل است")
+                .setContentText(currentName.ifBlank { "DNS فعال" })
+                .setSmallIcon(android.R.drawable.ic_lock_lock)
+                .setContentIntent(open)
+                .addAction(act)
+                .setOngoing(true)
+                .build()
+            nm.notify(NOTIF_ID, n)
+        } catch (_: Exception) {}
     }
 
     private fun loop(servers: List<String>) {

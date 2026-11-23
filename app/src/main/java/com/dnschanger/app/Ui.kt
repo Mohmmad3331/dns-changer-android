@@ -46,52 +46,76 @@ fun TextView.gold(): TextView {
     return this
 }
 
-/** پس‌زمینهٔ برجسته: دکمهٔ طلایی فلزی یا کارت بافت‌دار با حاشیهٔ طلایی */
+/** پس‌زمینهٔ برجسته: دکمهٔ طلایی فلزی یا کارت بافت‌دار با حاشیهٔ طلایی (شیدرها کش می‌شوند تا اسکرول روان بماند) */
 class FancyDrawable(private val gold: Boolean, private val fill: Int, private val stroke: Int, private val rad: Float, private val d: Float) : Drawable() {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val clip = Path()
+    private var lw = -1
+    private var lh = -1
+    private var body: Shader? = null
+    private var extra: Shader? = null
+    private var border: Shader? = null
+
+    companion object {
+        private val tiles = arrayOfNulls<BitmapShader>(2)
+        fun hatch(dark: Boolean, d: Float): BitmapShader {
+            val i = if (dark) 1 else 0
+            tiles[i]?.let { return it }
+            val sz = (d * 6f).toInt().coerceAtLeast(6)
+            val bm = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888)
+            val c = Canvas(bm)
+            val pp = Paint(Paint.ANTI_ALIAS_FLAG)
+            pp.strokeWidth = d * 0.8f
+            pp.color = if (dark) Color.argb(26, 0, 0, 0) else Color.argb(14, 255, 255, 255)
+            val f = sz.toFloat()
+            c.drawLine(0f, f, f, 0f, pp)
+            c.drawLine(-f / 2, f / 2, f / 2, -f / 2, pp)
+            c.drawLine(f / 2, f * 1.5f, f * 1.5f, f / 2, pp)
+            val sh = BitmapShader(bm, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+            tiles[i] = sh
+            return sh
+        }
+    }
+
+    private fun build(w: Float, h: Float) {
+        val a = T.accent
+        if (gold) {
+            val fh = h - d * 2f
+            body = LinearGradient(0f, 0f, 0f, fh, intArrayOf(lighten(a, 0.6f), lighten(a, 0.15f), a, darken(a, 0.3f)), floatArrayOf(0f, 0.35f, 0.6f, 1f), Shader.TileMode.CLAMP)
+            extra = LinearGradient(0f, 0f, 0f, fh * 0.5f, Color.argb(110, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP)
+        } else {
+            val al = maxOf(Color.alpha(fill), 242)
+            body = LinearGradient(0f, 0f, 0f, h, Color.argb(al, 36, 36, 46), Color.argb(al, 15, 15, 20), Shader.TileMode.CLAMP)
+            extra = RadialGradient(0f, 0f, maxOf(w * 0.8f, 1f), withAlpha(a, 34), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            val sc = if (stroke != 0) stroke else T.stroke
+            border = LinearGradient(0f, 0f, w, h, intArrayOf(withAlpha(lighten(a, 0.2f), 170), sc, withAlpha(a, 80)), null, Shader.TileMode.CLAMP)
+        }
+        lw = w.toInt(); lh = h.toInt()
+    }
 
     override fun draw(cv: Canvas) {
         val b = bounds
         val w = b.width().toFloat(); val h = b.height().toFloat()
         if (w <= 0f || h <= 0f) return
+        if (w.toInt() != lw || h.toInt() != lh) build(w, h)
         cv.save(); cv.translate(b.left.toFloat(), b.top.toFloat())
+        p.style = Paint.Style.FILL
         if (gold) {
-            val a = T.accent
             val ed = d * 2f
-            p.style = Paint.Style.FILL; p.shader = null; p.color = darken(a, 0.62f)
+            p.shader = null; p.color = darken(T.accent, 0.62f)
             cv.drawRoundRect(RectF(0f, ed, w, h), rad, rad, p)
             val face = RectF(0f, 0f, w, h - ed)
-            p.shader = LinearGradient(0f, 0f, 0f, face.height(), intArrayOf(lighten(a, 0.6f), lighten(a, 0.15f), a, darken(a, 0.3f)), floatArrayOf(0f, 0.35f, 0.6f, 1f), Shader.TileMode.CLAMP)
-            cv.drawRoundRect(face, rad, rad, p)
-            clip.reset(); clip.addRoundRect(face, rad, rad, Path.Direction.CW)
-            cv.save(); cv.clipPath(clip)
-            p.shader = LinearGradient(0f, 0f, 0f, face.height() * 0.5f, Color.argb(110, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP)
-            cv.drawRect(0f, 0f, w, face.height() * 0.5f, p)
-            p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = d * 0.7f; p.color = Color.argb(22, 0, 0, 0)
-            var x = -face.height()
-            while (x < w) { cv.drawLine(x, face.height(), x + face.height(), 0f, p); x += d * 5f }
-            cv.restore()
-            p.style = Paint.Style.STROKE; p.strokeWidth = d * 1.2f; p.color = withAlpha(lighten(a, 0.8f), 210)
+            p.shader = body; cv.drawRoundRect(face, rad, rad, p)
+            p.shader = hatch(true, d); cv.drawRoundRect(face, rad, rad, p)
+            p.shader = extra
+            cv.drawRoundRect(RectF(d, d, w - d, face.height() * 0.5f), rad, rad, p)
+            p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = d * 1.2f; p.color = withAlpha(lighten(T.accent, 0.8f), 210)
             cv.drawRoundRect(RectF(d * 0.6f, d * 0.6f, w - d * 0.6f, face.height() - d * 0.6f), rad, rad, p)
         } else {
-            val al = Color.alpha(fill)
-            p.style = Paint.Style.FILL
-            p.shader = LinearGradient(0f, 0f, 0f, h, Color.argb(al, 36, 36, 46), Color.argb(al, 15, 15, 20), Shader.TileMode.CLAMP)
             val full = RectF(0f, 0f, w, h)
-            cv.drawRoundRect(full, rad, rad, p)
-            clip.reset(); clip.addRoundRect(full, rad, rad, Path.Direction.CW)
-            cv.save(); cv.clipPath(clip)
-            p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = d * 0.6f; p.color = Color.argb(11, 255, 255, 255)
-            var x = -h
-            while (x < w) { cv.drawLine(x, h, x + h, 0f, p); x += d * 6f }
-            p.style = Paint.Style.FILL
-            p.shader = RadialGradient(0f, 0f, maxOf(w * 0.8f, 1f), withAlpha(T.accent, 34), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-            cv.drawRect(0f, 0f, w, h, p)
-            cv.restore()
-            val sc = if (stroke != 0) stroke else T.stroke
-            p.style = Paint.Style.STROKE; p.strokeWidth = d * 1.2f
-            p.shader = LinearGradient(0f, 0f, w, h, intArrayOf(withAlpha(lighten(T.accent, 0.2f), 170), sc, withAlpha(T.accent, 80)), null, Shader.TileMode.CLAMP)
+            p.shader = body; cv.drawRoundRect(full, rad, rad, p)
+            p.shader = hatch(false, d); cv.drawRoundRect(full, rad, rad, p)
+            p.shader = extra; cv.drawRoundRect(full, rad, rad, p)
+            p.style = Paint.Style.STROKE; p.strokeWidth = d * 1.2f; p.shader = border
             cv.drawRoundRect(RectF(d * 0.6f, d * 0.6f, w - d * 0.6f, h - d * 0.6f), rad, rad, p)
             p.shader = null; p.strokeWidth = d * 0.8f; p.color = Color.argb(34, 255, 255, 255)
             cv.drawLine(rad, d * 2f, w - rad, d * 2f, p)
@@ -418,8 +442,12 @@ class GlowBg(c: Context) : View(c) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private var grain = FloatArray(0)
     private var dots = FloatArray(0)
+    private var bmp: Bitmap? = null
+
+    override fun onDetachedFromWindow() { bmp?.recycle(); bmp = null; super.onDetachedFromWindow() }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+        if (w <= 0 || h <= 0) return
         val rnd = java.util.Random(11)
         val g = FloatArray(1800)
         for (i in 0 until 900) { g[i * 2] = rnd.nextFloat() * w; g[i * 2 + 1] = rnd.nextFloat() * h }
@@ -441,6 +469,15 @@ class GlowBg(c: Context) : View(c) {
             y += sp
         }
         dots = list.toFloatArray()
+        bmp?.recycle()
+        val bm = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        paintAll(Canvas(bm), w.toFloat(), h.toFloat())
+        bmp = bm
+    }
+
+    override fun onDraw(cv: Canvas) {
+        val b = bmp
+        if (b != null) cv.drawBitmap(b, 0f, 0f, null) else cv.drawColor(T.bg)
     }
 
     private fun waveY(x: Float, base: Float, amp: Float, len: Float, ph: Float): Float {
@@ -477,8 +514,8 @@ class GlowBg(c: Context) : View(c) {
         p.shader = null
     }
 
-    override fun onDraw(cv: Canvas) {
-        val w = width.toFloat(); val h = height.toFloat(); val d = context.dpf(1f)
+    private fun paintAll(cv: Canvas, w: Float, h: Float) {
+        val d = context.dpf(1f)
         p.style = Paint.Style.FILL
         p.shader = LinearGradient(0f, 0f, 0f, h, Color.parseColor("#0E0E14"), Color.parseColor("#050507"), Shader.TileMode.CLAMP)
         cv.drawRect(0f, 0f, w, h, p)
@@ -490,16 +527,16 @@ class GlowBg(c: Context) : View(c) {
         p.style = Paint.Style.STROKE
         p.strokeCap = Paint.Cap.ROUND
         p.strokeWidth = d * 2.2f
-        p.color = withAlpha(T.accent, 50)
+        p.color = withAlpha(T.accent, 36)
         cv.drawPoints(dots, p)
         p.strokeWidth = d * 1f
         p.color = Color.argb(28, 255, 255, 255)
         cv.drawPoints(grain, p)
-        for (k in 0..6) {
-            wave(cv, w, h, h * (0.72f + 0.045f * k), h * (0.045f - 0.003f * k), w * (1.3f - 0.07f * k), k * 0.7f, 235 - k * 22, true)
+        for (k in 0..4) {
+            wave(cv, w, h, h * (0.78f + 0.04f * k), h * (0.04f - 0.003f * k), w * (1.3f - 0.08f * k), k * 0.7f, 170 - k * 24, true)
         }
-        for (k in 0..2) {
-            wave(cv, w, h, h * (0.05f + 0.03f * k), h * 0.022f, w * 1.1f, 2f + k, 120 - k * 20, false)
+        for (k in 0..1) {
+            wave(cv, w, h, h * (0.05f + 0.03f * k), h * 0.022f, w * 1.1f, 2f + k, 90 - k * 20, false)
         }
         p.style = Paint.Style.FILL
         p.shader = RadialGradient(w / 2, h / 2, maxOf(w, h) * 0.8f, intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, Color.argb(170, 0, 0, 0)), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
@@ -513,12 +550,13 @@ class PowerView(c: Context) : View(c) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     override fun onDraw(cv: Canvas) {
         val cx = width / 2f; val cy = height / 2f
-        val r = minOf(width, height) * 0.34f
+        val r = minOf(width, height) * 0.30f
+        val hr = minOf(width, height) / 2f
         val d = context.dpf(1f)
         val gl = if (on) 140 else 40
         p.style = Paint.Style.FILL
-        p.shader = RadialGradient(cx, cy, r * 1.9f, intArrayOf(withAlpha(T.accent, gl), withAlpha(T.accent, gl / 4), Color.TRANSPARENT), floatArrayOf(0.45f, 0.75f, 1f), Shader.TileMode.CLAMP)
-        cv.drawCircle(cx, cy, r * 1.9f, p)
+        p.shader = RadialGradient(cx, cy, hr, intArrayOf(withAlpha(T.accent, gl), withAlpha(T.accent, gl / 3), Color.TRANSPARENT), floatArrayOf(0.5f, 0.8f, 1f), Shader.TileMode.CLAMP)
+        cv.drawCircle(cx, cy, hr, p)
         p.shader = null
         p.style = Paint.Style.STROKE
         p.strokeCap = Paint.Cap.ROUND
@@ -620,8 +658,10 @@ class GaugeView(c: Context) : View(c) {
         if (frac > 0f) {
             val sg = SweepGradient(cx, cy, intArrayOf(darken(T.accent, 0.45f), T.accent, lighten(T.accent, 0.6f), lighten(T.accent, 0.6f), darken(T.accent, 0.45f)), floatArrayOf(0f, 0.3f, 0.62f, 0.66f, 1f))
             val m = Matrix(); m.postRotate(150f, cx, cy); sg.setLocalMatrix(m)
-            p.color = withAlpha(T.accent, 55); p.strokeWidth = r * 0.26f
+            p.strokeCap = Paint.Cap.BUTT
+            p.color = withAlpha(T.accent, 45); p.strokeWidth = r * 0.2f
             cv.drawArc(rc, 150f, 240f * frac, false, p)
+            p.strokeCap = Paint.Cap.ROUND
             p.shader = sg; p.strokeWidth = r * 0.14f
             cv.drawArc(rc, 150f, 240f * frac, false, p)
             p.shader = null

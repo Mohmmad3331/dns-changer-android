@@ -38,6 +38,8 @@ class MainActivity : Activity() {
         repo = DnsRepo(this)
         T.accent = Color.parseColor(if (repo.blue) "#4DA3FF" else "#FFC21A")
         window.statusBarColor = T.bg
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED)
+            requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 5)
         window.navigationBarColor = T.nav
         val root = FrameLayout(this)
         root.addView(GlowBg(this), FrameLayout.LayoutParams(-1, -1))
@@ -168,6 +170,13 @@ class MainActivity : Activity() {
             if (c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) r = "Mobile" else if (r == "Offline") r = "Other"
         }
         return r
+    }
+
+    private fun pinWidget() {
+        val m = android.appwidget.AppWidgetManager.getInstance(this)
+        if (android.os.Build.VERSION.SDK_INT >= 26 && m.isRequestPinAppWidgetSupported) {
+            m.requestPinAppWidget(android.content.ComponentName(this, DnsWidget::class.java), null, null)
+        } else toast("روی صفحهٔ اصلی بلند لمس کن ← ویجت‌ها ← DNS Changer")
     }
 
     private fun toggle() {
@@ -461,6 +470,11 @@ class MainActivity : Activity() {
         section("Notifications")
         val n1 = rowBase("bell", "Enable Notifications", null)
         n1.add(Switch(this).apply { style(); isChecked = repo.notif; setOnCheckedChangeListener { _, v -> repo.notif = v } }, -2, -2)
+        rowBase("alert", "Quick Disconnect", "وقتی وصلی، در اعلان‌ها دکمهٔ «قطع اتصال» هست")
+        rowBase("home", "Add Home Widget", "دکمهٔ اتصال/قطع روی صفحهٔ اصلی گوشی").apply {
+            add(IconView(this@MainActivity, "chev", T.sub, 22), -2, -2)
+            setOnClickListener { pinWidget() }
+        }
         val n2 = rowBase("alert", "Connection Alerts", null)
         n2.add(CheckBox(this).apply { style(); isChecked = repo.alerts; setOnCheckedChangeListener { _, v -> repo.alerts = v } }, -2, -2)
         section("Data")
@@ -496,7 +510,7 @@ class MainActivity : Activity() {
             setOnClickListener {
                 AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("DNS Changer")
-                    .setMessage("نسخه 1.8\nتغییر DNS با VPN محلی، تست سرعت DNS و تست پینگ بازی‌ها با IPv4 و IPv6.")
+                    .setMessage("نسخه 1.9\nتغییر DNS با VPN محلی، تست سرعت DNS و تست پینگ بازی‌ها با IPv4 و IPv6.")
                     .setPositiveButton("باشه", null).show()
             }
         }
@@ -505,7 +519,7 @@ class MainActivity : Activity() {
         }
         foot.add(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }, 44, 44, r = 12)
         val ft = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        ft.addView(tv("DNS Changer", 16f, T.text, true)); ft.addView(tv("v1.8", 12f, T.sub))
+        ft.addView(tv("DNS Changer", 16f, T.text, true)); ft.addView(tv("v1.9", 12f, T.sub))
         foot.add(ft, -2, -2)
         col.add(foot, t = 16)
         return sc

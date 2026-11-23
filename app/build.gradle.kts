@@ -17,8 +17,8 @@ android {
         applicationId = "com.dnschanger.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.8"
+        versionCode = 9
+        versionName = "1.9"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
