@@ -17,7 +17,8 @@ class DnsScanActivity : Activity() {
     private class Res(val c: Cand, val dnsMs: Long, val ping: Long, val ok: Int, val total: Int)
 
     private lateinit var repo: DnsRepo
-    private lateinit var hosts: List<String>
+    @Volatile private var hosts: List<String> = listOf("google.com")
+    private var hostsEt: EditText? = null
     private lateinit var gameName: String
     private lateinit var status: TextView
     private lateinit var bar: ProgressBar
@@ -45,7 +46,17 @@ class DnsScanActivity : Activity() {
         hd.add(View(this), 44, 44)
         col.add(hd)
         col.add(tv(gameName, 18f, T.accent, true).apply { gravity = Gravity.CENTER }, t = 8)
-        col.add(tv("دامنه‌ها: ${hosts.joinToString("، ")}", 11f, T.sub).apply { gravity = Gravity.CENTER })
+        if (intent.getBooleanExtra("editable", false)) {
+            col.add(tv("دامنه‌های سرور برنامه (با کاما جدا کن؛ اگر اشتباه بود اصلاحش کن)", 12f, T.sub), t = 10, b = 4)
+            hostsEt = EditText(this).apply {
+                setText(hosts.joinToString(", "))
+                setTextColor(T.text); textSize = 13f
+                textDirection = View.TEXT_DIRECTION_LTR
+                background = rect(withAlpha(T.card, 235), T.stroke, 14)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+            }
+            col.add(hostsEt!!)
+        } else col.add(tv("دامنه‌ها: ${hosts.joinToString("، ")}", 11f, T.sub).apply { gravity = Gravity.CENTER })
 
         bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             progressTintList = android.content.res.ColorStateList.valueOf(T.accent)
@@ -105,12 +116,32 @@ class DnsScanActivity : Activity() {
         scanning = true; cancel = false
         results.clear(); list.removeAllViews()
         setBtn("Stop", "alert")
+        hostsEt?.let { et ->
+            val h = et.text.toString().split(",", " ", "\n", "،").map { it.trim().lowercase().removePrefix("https://").removePrefix("http://").substringBefore('/') }.filter { it.isNotEmpty() }
+            if (h.isNotEmpty()) hosts = h
+        }
         val cands = candidates()
         val total = cands.size
         bar.max = total; bar.progress = 0
-        status.text = "در حال تست 0 / $total ..."
+        status.text = "بررسی دامنه‌ها..."
+        status.setTextColor(T.sub)
         val done = AtomicInteger(0)
         Thread {
+            val probe = listOf("8.8.8.8", "1.1.1.1", "78.157.42.100", "178.22.122.100")
+            val valid = hosts.filter { h ->
+                probe.any { d -> val r = NetTest.resolve(d, h, 1, 2000); r != null && !NetTest.isBogus(r.first) }
+            }
+            if (valid.isEmpty()) {
+                runOnUiThread {
+                    scanning = false
+                    status.text = "هیچ‌کدام از دامنه‌ها پیدا نشد؛ دامنهٔ سرور برنامه را در کادر بالا درست کن."
+                    status.setTextColor(T.bad)
+                    setBtn("Scan Again", "play")
+                }
+                return@Thread
+            }
+            hosts = valid
+            runOnUiThread { status.text = "در حال تست 0 / $total ..." }
             val ex = Executors.newFixedThreadPool(32)
             cands.forEach { c ->
                 ex.execute {

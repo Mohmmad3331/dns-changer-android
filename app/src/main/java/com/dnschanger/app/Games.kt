@@ -43,3 +43,56 @@ object Games {
         }
     }
 }
+
+/** حدس دامنه‌های هر برنامه برای تست DNS */
+object AppHosts {
+    private val map = listOf(
+        "instagram" to listOf("instagram.com", "i.instagram.com", "cdninstagram.com"),
+        "telegram" to listOf("telegram.org", "web.telegram.org", "t.me"),
+        "whatsapp" to listOf("whatsapp.com", "web.whatsapp.com", "whatsapp.net"),
+        "google.android.youtube" to listOf("youtube.com", "googlevideo.com", "ytimg.com"),
+        "musically" to listOf("tiktok.com", "tiktokv.com", "tiktokcdn.com"),
+        "ugc.trill" to listOf("tiktok.com", "tiktokv.com", "tiktokcdn.com"),
+        "facebook" to listOf("facebook.com", "fbcdn.net", "graph.facebook.com"),
+        "twitter" to listOf("twitter.com", "twimg.com", "x.com"),
+        "spotify" to listOf("spotify.com", "scdn.co", "api.spotify.com"),
+        "netflix" to listOf("netflix.com", "nflxvideo.net", "nflximg.net"),
+        "discord" to listOf("discord.com", "discordapp.com", "discord.gg"),
+        "snapchat" to listOf("snapchat.com", "sc-cdn.net", "feelinsonice.com"),
+        "zoom" to listOf("zoom.us", "zoom.com"),
+        "twitch" to listOf("twitch.tv", "ttvnw.net", "twitchcdn.net"),
+        "reddit" to listOf("reddit.com", "redd.it", "redditstatic.com"),
+        "android.vending" to listOf("play.google.com", "gstatic.com", "googleapis.com"),
+        "android.chrome" to listOf("google.com", "gstatic.com", "googleapis.com"),
+        "com.google." to listOf("google.com", "gstatic.com", "googleapis.com"),
+        "digikala" to listOf("digikala.com", "api.digikala.com", "dkstatics-public.digikala.com"),
+        "snapp" to listOf("snapp.ir", "app.snapp.taxi", "snappfood.ir"),
+        "divar" to listOf("divar.ir", "api.divar.ir"),
+        "aparat" to listOf("aparat.com", "static.aparat.com"),
+        "rubika" to listOf("rubika.ir", "messengerg2c1.iranlms.ir"),
+        "nasim" to listOf("bale.ai", "web.bale.ai"),
+        "eitaa" to listOf("eitaa.com", "web.eitaa.com"),
+        "balad" to listOf("balad.ir", "api.balad.ir"),
+        "shad" to listOf("shad.ir", "rubika.ir")
+    )
+
+    fun forPackage(pkg: String, label: String): List<String> {
+        Games.known.firstOrNull { g -> g.pkgs.contains(pkg) }?.let { return it.hosts }
+        val p = pkg.lowercase()
+        for ((k, v) in map) if (p.contains(k)) return v
+        val parts = p.split(".")
+        val generic = setOf("android", "app", "apps", "mobile", "client", "lite", "messenger", "main", "release", "free", "pro", "mobi", "droid", "official", "global", "gp", "play")
+        val first = parts.first()
+        val rest = parts.drop(1).filter { it !in generic && it.length > 2 }
+        val name = rest.firstOrNull() ?: parts.getOrNull(1) ?: first
+        val dom = when (first) {
+            "ir" -> "$name.ir"
+            "org" -> "$name.org"
+            "net" -> "$name.net"
+            "tv" -> "$name.tv"
+            "io" -> "$name.io"
+            else -> "$name.com"
+        }
+        return listOf(dom, "www.$dom", "api.$dom").distinct()
+    }
+}

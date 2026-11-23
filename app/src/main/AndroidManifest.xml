@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <package android:name="com.HoYoverse.hkrpgoversea" />
         <package android:name="com.activision.callofduty.shooter" />
         <package android:name="com.activision.callofduty.warzone" />
@@ -51,6 +55,7 @@
         <activity android:name=".BoostActivity" android:exported="false" />
         <activity android:name=".DnsScanActivity" android:exported="false" />
         <activity android:name=".WorldDnsActivity" android:exported="false" />
+        <activity android:name=".AppPickerActivity" android:exported="false" />
         <receiver android:name=".DnsWidget" android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

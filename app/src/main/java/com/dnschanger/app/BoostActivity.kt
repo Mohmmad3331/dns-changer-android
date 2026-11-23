@@ -107,6 +107,8 @@ class BoostActivity : Activity() {
 
         col.add(iconBtn("Find Best DNS", "search", true) { openScan() }, t = 12)
         col.add(tv("همهٔ DNSها (لیست خودت + ۱۰۰۰ DNS کشورها) را امتحان می‌کند و بهترین‌ها را برای انتخاب بالا فهرست می‌کند.", 11f, T.sub), t = 4)
+        col.add(iconBtn("Best DNS for any app", "globe", false) { startActivity(Intent(this, AppPickerActivity::class.java)) }, t = 12)
+        col.add(tv("همهٔ برنامه‌های گوشی را نشان می‌دهد؛ هر کدام را انتخاب کنی، بهترین DNS برای همان برنامه را پیدا می‌کند.", 11f, T.sub), t = 4)
 
         val info = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL; background = rect(withAlpha(T.card, 235), T.stroke, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
