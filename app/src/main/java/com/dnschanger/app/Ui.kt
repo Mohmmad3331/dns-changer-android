@@ -56,52 +56,22 @@ class FancyDrawable(private val gold: Boolean, private val fill: Int, private va
     private var border: Shader? = null
 
     companion object {
-        private var weaveT: BitmapShader? = null
-        private var brushT: BitmapShader? = null
-
-        /** بافت فیبر کربن برای کارت‌ها و پس‌زمینه */
-        fun weave(d: Float): BitmapShader {
-            weaveT?.let { return it }
-            val q = (d * 4f).toInt().coerceAtLeast(4)
-            val sz = q * 2
+        private val tiles = arrayOfNulls<BitmapShader>(2)
+        fun hatch(dark: Boolean, d: Float): BitmapShader {
+            val i = if (dark) 1 else 0
+            tiles[i]?.let { return it }
+            val sz = (d * 6f).toInt().coerceAtLeast(6)
             val bm = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888)
             val c = Canvas(bm)
-            val pp = Paint()
-            val qf = q.toFloat()
-            for (i in 0..1) for (j in 0..1) {
-                pp.shader = if ((i + j) % 2 == 0)
-                    LinearGradient(0f, 0f, 0f, qf, Color.argb(36, 255, 255, 255), Color.argb(4, 255, 255, 255), Shader.TileMode.CLAMP)
-                else
-                    LinearGradient(0f, 0f, qf, 0f, Color.argb(4, 0, 0, 0), Color.argb(80, 0, 0, 0), Shader.TileMode.CLAMP)
-                c.save(); c.translate(i * qf, j * qf)
-                c.drawRect(0f, 0f, qf, qf, pp)
-                c.restore()
-            }
+            val pp = Paint(Paint.ANTI_ALIAS_FLAG)
+            pp.strokeWidth = d * 0.8f
+            pp.color = if (dark) Color.argb(26, 0, 0, 0) else Color.argb(14, 255, 255, 255)
+            val f = sz.toFloat()
+            c.drawLine(0f, f, f, 0f, pp)
+            c.drawLine(-f / 2, f / 2, f / 2, -f / 2, pp)
+            c.drawLine(f / 2, f * 1.5f, f * 1.5f, f / 2, pp)
             val sh = BitmapShader(bm, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-            weaveT = sh
-            return sh
-        }
-
-        /** بافت فلز ساب‌خورده (خطوط افقی ریز) برای دکمه‌های طلایی */
-        fun brushed(d: Float): BitmapShader {
-            brushT?.let { return it }
-            val w = (d * 96f).toInt().coerceAtLeast(64)
-            val h = (d * 28f).toInt().coerceAtLeast(20)
-            val bm = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            val c = Canvas(bm)
-            val pp = Paint()
-            pp.strokeWidth = 1f
-            val rnd = java.util.Random(5)
-            for (k in 0 until 70) {
-                val y = rnd.nextInt(h).toFloat()
-                val x0 = rnd.nextInt(w).toFloat()
-                val len = (w * (0.2f + rnd.nextFloat() * 0.7f))
-                pp.color = if (rnd.nextBoolean()) Color.argb(18 + rnd.nextInt(34), 255, 255, 255) else Color.argb(14 + rnd.nextInt(24), 60, 30, 0)
-                c.drawLine(x0, y, x0 + len, y, pp)
-                if (x0 + len > w) c.drawLine(x0 - w, y, x0 + len - w, y, pp)
-            }
-            val sh = BitmapShader(bm, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-            brushT = sh
+            tiles[i] = sh
             return sh
         }
     }
@@ -135,7 +105,7 @@ class FancyDrawable(private val gold: Boolean, private val fill: Int, private va
             cv.drawRoundRect(RectF(0f, ed, w, h), rad, rad, p)
             val face = RectF(0f, 0f, w, h - ed)
             p.shader = body; cv.drawRoundRect(face, rad, rad, p)
-            p.shader = brushed(d); cv.drawRoundRect(face, rad, rad, p)
+            p.shader = hatch(true, d); cv.drawRoundRect(face, rad, rad, p)
             p.shader = extra
             cv.drawRoundRect(RectF(d, d, w - d, face.height() * 0.5f), rad, rad, p)
             p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = d * 1.2f; p.color = withAlpha(lighten(T.accent, 0.8f), 210)
@@ -143,7 +113,7 @@ class FancyDrawable(private val gold: Boolean, private val fill: Int, private va
         } else {
             val full = RectF(0f, 0f, w, h)
             p.shader = body; cv.drawRoundRect(full, rad, rad, p)
-            p.shader = weave(d); cv.drawRoundRect(full, rad, rad, p)
+            p.shader = hatch(false, d); cv.drawRoundRect(full, rad, rad, p)
             p.shader = extra; cv.drawRoundRect(full, rad, rad, p)
             p.style = Paint.Style.STROKE; p.strokeWidth = d * 1.2f; p.shader = border
             cv.drawRoundRect(RectF(d * 0.6f, d * 0.6f, w - d * 0.6f, h - d * 0.6f), rad, rad, p)
@@ -552,8 +522,6 @@ class GlowBg(c: Context) : View(c) {
         p.shader = RadialGradient(w * 0.5f, h, h * 0.65f, withAlpha(T.accent, 95), Color.TRANSPARENT, Shader.TileMode.CLAMP)
         cv.drawRect(0f, 0f, w, h, p)
         p.shader = RadialGradient(w * 0.15f, 0f, h * 0.4f, withAlpha(T.accent, 55), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        cv.drawRect(0f, 0f, w, h, p)
-        p.shader = FancyDrawable.weave(d)
         cv.drawRect(0f, 0f, w, h, p)
         p.shader = null
         p.style = Paint.Style.STROKE

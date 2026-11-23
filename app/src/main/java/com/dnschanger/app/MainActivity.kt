@@ -30,6 +30,8 @@ class MainActivity : Activity() {
 
     private val speed = HashMap<String, Long>()
     private var speedBusy = false
+    private var lastPing = "—"
+    private var pingBusy = false
     private var gauge: GaugeView? = null
     private var speedBox: LinearLayout? = null
 
@@ -114,11 +116,23 @@ class MainActivity : Activity() {
         col.add(c, t = 12)
 
         val row = LinearLayout(this)
-        val pingTv = tv("…", 22f, T.text, true)
+        val pingTv = tv(if (pingBusy) "…" else lastPing, 22f, T.text, true)
         val t1 = card().apply {
             val hd = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
-            hd.addView(IconView(this@MainActivity, "bolt", T.accent, 18)); hd.addView(tv("Ping", 13f, T.sub).apply { setPadding(dp(6), 0, 0, 0) })
+            hd.addView(IconView(this@MainActivity, "bolt", T.accent, 18)); hd.addView(tv("Ping · لمس کن تا تست شود", 13f, T.sub).apply { setPadding(dp(6), 0, 0, 0) })
             addView(hd); addView(pingTv)
+            setOnClickListener {
+                if (!pingBusy) {
+                    pingBusy = true; pingTv.text = "…"
+                    val pt0 = d.pingTarget()
+                    Thread {
+                        val ms0 = NetTest.tcpPing(pt0.first, pt0.second)
+                        lastPing = if (ms0 == null) "—" else "$ms0 ms"
+                        pingBusy = false
+                        runOnUiThread { pingTv.text = lastPing }
+                    }.start()
+                }
+            }
         }
         val t2 = card().apply {
             val hd = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -143,11 +157,6 @@ class MainActivity : Activity() {
         col.add(hb, t = 10)
         col.add(iconBtn("Game Boost", "bolt", true) { startActivity(Intent(this, BoostActivity::class.java)) }, t = 10)
 
-        Thread {
-            val pt = d.pingTarget()
-            val ms = NetTest.tcpPing(pt.first, pt.second)
-            runOnUiThread { pingTv.text = if (ms == null) "—" else "$ms ms" }
-        }.start()
         if (on) Thread {
             Thread.sleep(1200)
             val r = NetTest.resolveSystem("google.com", false)
@@ -219,7 +228,6 @@ class MainActivity : Activity() {
         col.add(tv("زمان پاسخ واقعی هر DNS برای یک درخواست (google.com)؛ عدد کمتر بهتر است.", 11f, T.sub), t = 8)
         updateGauge()
         renderSpeedList()
-        if (speed.isEmpty() && !speedBusy) runSpeed()
         return sc
     }
 
@@ -510,7 +518,7 @@ class MainActivity : Activity() {
             setOnClickListener {
                 AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("DNS Changer")
-                    .setMessage("نسخه 1.10\nتغییر DNS با VPN محلی، تست سرعت DNS و تست پینگ بازی‌ها با IPv4 و IPv6.")
+                    .setMessage("نسخه 1.11\nتغییر DNS با VPN محلی، تست سرعت DNS و تست پینگ بازی‌ها با IPv4 و IPv6.")
                     .setPositiveButton("باشه", null).show()
             }
         }
@@ -519,7 +527,7 @@ class MainActivity : Activity() {
         }
         foot.add(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }, 44, 44, r = 12)
         val ft = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        ft.addView(tv("DNS Changer", 16f, T.text, true)); ft.addView(tv("v1.10", 12f, T.sub))
+        ft.addView(tv("DNS Changer", 16f, T.text, true)); ft.addView(tv("v1.11", 12f, T.sub))
         foot.add(ft, -2, -2)
         col.add(foot, t = 16)
         return sc
