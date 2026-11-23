@@ -3,6 +3,7 @@ package com.dnschanger.app
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.*
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.MotionEvent
@@ -28,10 +29,93 @@ fun withAlpha(c: Int, a: Int): Int = (c and 0x00FFFFFF) or (a shl 24)
 fun Context.dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 fun Context.dpf(v: Float): Float = v * resources.displayMetrics.density
 
-fun Context.rect(fill: Int, stroke: Int = 0, r: Int = 14, sw: Int = 1): GradientDrawable = GradientDrawable().apply {
-    cornerRadius = dp(r).toFloat()
-    setColor(fill)
-    if (stroke != 0) setStroke(dp(sw), stroke)
+fun lighten(c: Int, f: Float): Int {
+    fun m(v: Int) = (v + (255 - v) * f).toInt().coerceIn(0, 255)
+    return Color.argb(Color.alpha(c), m(Color.red(c)), m(Color.green(c)), m(Color.blue(c)))
+}
+
+fun darken(c: Int, f: Float): Int {
+    fun m(v: Int) = (v * (1f - f)).toInt().coerceIn(0, 255)
+    return Color.argb(Color.alpha(c), m(Color.red(c)), m(Color.green(c)), m(Color.blue(c)))
+}
+
+/** متن با گرادیانت طلایی فلزی */
+fun TextView.gold(): TextView {
+    paint.shader = LinearGradient(0f, 0f, 0f, textSize * 1.3f,
+        intArrayOf(lighten(T.accent, 0.65f), T.accent, darken(T.accent, 0.3f)), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+    return this
+}
+
+/** پس‌زمینهٔ برجسته: دکمهٔ طلایی فلزی یا کارت بافت‌دار با حاشیهٔ طلایی */
+class FancyDrawable(private val gold: Boolean, private val fill: Int, private val stroke: Int, private val rad: Float, private val d: Float) : Drawable() {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val clip = Path()
+
+    override fun draw(cv: Canvas) {
+        val b = bounds
+        val w = b.width().toFloat(); val h = b.height().toFloat()
+        if (w <= 0f || h <= 0f) return
+        cv.save(); cv.translate(b.left.toFloat(), b.top.toFloat())
+        if (gold) {
+            val a = T.accent
+            val ed = d * 2f
+            p.style = Paint.Style.FILL; p.shader = null; p.color = darken(a, 0.62f)
+            cv.drawRoundRect(RectF(0f, ed, w, h), rad, rad, p)
+            val face = RectF(0f, 0f, w, h - ed)
+            p.shader = LinearGradient(0f, 0f, 0f, face.height(), intArrayOf(lighten(a, 0.6f), lighten(a, 0.15f), a, darken(a, 0.3f)), floatArrayOf(0f, 0.35f, 0.6f, 1f), Shader.TileMode.CLAMP)
+            cv.drawRoundRect(face, rad, rad, p)
+            clip.reset(); clip.addRoundRect(face, rad, rad, Path.Direction.CW)
+            cv.save(); cv.clipPath(clip)
+            p.shader = LinearGradient(0f, 0f, 0f, face.height() * 0.5f, Color.argb(110, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP)
+            cv.drawRect(0f, 0f, w, face.height() * 0.5f, p)
+            p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = d * 0.7f; p.color = Color.argb(22, 0, 0, 0)
+            var x = -face.height()
+            while (x < w) { cv.drawLine(x, face.height(), x + face.height(), 0f, p); x += d * 5f }
+            cv.restore()
+            p.style = Paint.Style.STROKE; p.strokeWidth = d * 1.2f; p.color = withAlpha(lighten(a, 0.8f), 210)
+            cv.drawRoundRect(RectF(d * 0.6f, d * 0.6f, w - d * 0.6f, face.height() - d * 0.6f), rad, rad, p)
+        } else {
+            val al = Color.alpha(fill)
+            p.style = Paint.Style.FILL
+            p.shader = LinearGradient(0f, 0f, 0f, h, Color.argb(al, 36, 36, 46), Color.argb(al, 15, 15, 20), Shader.TileMode.CLAMP)
+            val full = RectF(0f, 0f, w, h)
+            cv.drawRoundRect(full, rad, rad, p)
+            clip.reset(); clip.addRoundRect(full, rad, rad, Path.Direction.CW)
+            cv.save(); cv.clipPath(clip)
+            p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = d * 0.6f; p.color = Color.argb(11, 255, 255, 255)
+            var x = -h
+            while (x < w) { cv.drawLine(x, h, x + h, 0f, p); x += d * 6f }
+            p.style = Paint.Style.FILL
+            p.shader = RadialGradient(0f, 0f, maxOf(w * 0.8f, 1f), withAlpha(T.accent, 34), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            cv.drawRect(0f, 0f, w, h, p)
+            cv.restore()
+            val sc = if (stroke != 0) stroke else T.stroke
+            p.style = Paint.Style.STROKE; p.strokeWidth = d * 1.2f
+            p.shader = LinearGradient(0f, 0f, w, h, intArrayOf(withAlpha(lighten(T.accent, 0.2f), 170), sc, withAlpha(T.accent, 80)), null, Shader.TileMode.CLAMP)
+            cv.drawRoundRect(RectF(d * 0.6f, d * 0.6f, w - d * 0.6f, h - d * 0.6f), rad, rad, p)
+            p.shader = null; p.strokeWidth = d * 0.8f; p.color = Color.argb(34, 255, 255, 255)
+            cv.drawLine(rad, d * 2f, w - rad, d * 2f, p)
+        }
+        p.shader = null
+        cv.restore()
+    }
+
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(cf: ColorFilter?) {}
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+}
+
+fun Context.rect(fill: Int, stroke: Int = 0, r: Int = 14, sw: Int = 1): Drawable {
+    val rgb = fill and 0xFFFFFF
+    val alpha = (fill ushr 24) and 0xFF
+    if (stroke == 0 && alpha == 255 && rgb == (T.accent and 0xFFFFFF)) return FancyDrawable(true, fill, stroke, dpf(r.toFloat()), dpf(1f))
+    if (rgb == (T.card and 0xFFFFFF) && alpha > 100) return FancyDrawable(false, fill, stroke, dpf(r.toFloat()), dpf(1f))
+    return GradientDrawable().apply {
+        cornerRadius = dp(r).toFloat()
+        setColor(fill)
+        if (stroke != 0) setStroke(dp(sw), stroke)
+    }
 }
 
 fun Context.tv(t: String, size: Float = 14f, color: Int = T.text, bold: Boolean = false): TextView = TextView(this).apply {
@@ -332,32 +416,94 @@ class BarsView(c: Context, private val ms: Long) : View(c) {
 
 class GlowBg(c: Context) : View(c) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    override fun onDraw(cv: Canvas) {
-        val w = width.toFloat(); val h = height.toFloat()
-        cv.drawColor(T.bg)
-        p.style = Paint.Style.FILL
-        p.shader = RadialGradient(w * 0.5f, h, h * 0.55f, withAlpha(T.accent, 60), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        cv.drawRect(0f, 0f, w, h, p)
-        p.shader = RadialGradient(w * 0.2f, 0f, h * 0.35f, withAlpha(T.accent, 40), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        cv.drawRect(0f, 0f, w, h, p)
+    private var grain = FloatArray(0)
+    private var dots = FloatArray(0)
+
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+        val rnd = java.util.Random(11)
+        val g = FloatArray(1800)
+        for (i in 0 until 900) { g[i * 2] = rnd.nextFloat() * w; g[i * 2 + 1] = rnd.nextFloat() * h }
+        grain = g
+        val sp = context.dpf(8f)
+        val list = ArrayList<Float>()
+        var y = h * 0.05f
+        while (y < h * 0.64f) {
+            var x = 0f
+            while (x < w) {
+                val fx = x / w
+                val fy = y / h
+                val v = Math.sin(fx * 9.0) + Math.cos(fy * 11.0 + fx * 3.0) + Math.sin((fx + fy) * 14.0) * 0.7
+                val dx = fx - 0.5f
+                val dy = (fy - 0.3f) * 1.3f
+                if (v > 0.55 && dx * dx + dy * dy < 0.22f) { list.add(x); list.add(y) }
+                x += sp
+            }
+            y += sp
+        }
+        dots = list.toFloatArray()
+    }
+
+    private fun waveY(x: Float, base: Float, amp: Float, len: Float, ph: Float): Float {
+        val a = Math.sin(2.0 * Math.PI * x / len + ph)
+        val b = Math.sin(2.0 * Math.PI * x / (len * 0.53) + ph * 1.7) * 0.4
+        return base + (amp * (a + b)).toFloat()
+    }
+
+    private fun wave(cv: Canvas, w: Float, h: Float, base: Float, amp: Float, len: Float, ph: Float, a: Int, fillIt: Boolean) {
+        val d = context.dpf(1f)
+        val path = Path()
+        var x = -10f
+        path.moveTo(x, waveY(x, base, amp, len, ph))
+        while (x < w + 10f) { x += 10f; path.lineTo(x, waveY(x, base, amp, len, ph)) }
+        if (fillIt) {
+            val f = Path(path)
+            f.lineTo(w + 10f, h); f.lineTo(-10f, h); f.close()
+            p.style = Paint.Style.FILL
+            p.shader = LinearGradient(0f, base - amp, 0f, h, withAlpha(T.accent, a / 7), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            cv.drawPath(f, p)
+        }
         p.style = Paint.Style.STROKE
-        for (k in 0..3) {
-            val y = h * (0.80f + 0.04f * k)
-            val path = Path()
-            path.moveTo(-w * 0.1f, y)
-            path.cubicTo(w * 0.3f, y - h * (0.12f - 0.02f * k), w * 0.6f, y + h * (0.1f - 0.015f * k), w * 1.1f, y - h * 0.06f)
-            p.shader = LinearGradient(0f, 0f, w, 0f, intArrayOf(Color.TRANSPARENT, withAlpha(T.accent, 150 - k * 25), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
-            p.strokeWidth = context.dpf(1.4f)
-            cv.drawPath(path, p)
+        p.strokeCap = Paint.Cap.ROUND
+        p.shader = null
+        p.strokeWidth = d * 8f; p.color = withAlpha(T.accent, a / 8)
+        cv.drawPath(path, p)
+        p.strokeWidth = d * 3.5f; p.color = withAlpha(T.accent, a / 3)
+        cv.drawPath(path, p)
+        p.strokeWidth = d * 1.3f
+        p.shader = LinearGradient(0f, 0f, w, 0f,
+            intArrayOf(Color.TRANSPARENT, withAlpha(darken(T.accent, 0.35f), a), withAlpha(lighten(T.accent, 0.55f), a), withAlpha(T.accent, a), Color.TRANSPARENT),
+            floatArrayOf(0f, 0.2f, 0.5f, 0.8f, 1f), Shader.TileMode.CLAMP)
+        cv.drawPath(path, p)
+        p.shader = null
+    }
+
+    override fun onDraw(cv: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat(); val d = context.dpf(1f)
+        p.style = Paint.Style.FILL
+        p.shader = LinearGradient(0f, 0f, 0f, h, Color.parseColor("#0E0E14"), Color.parseColor("#050507"), Shader.TileMode.CLAMP)
+        cv.drawRect(0f, 0f, w, h, p)
+        p.shader = RadialGradient(w * 0.5f, h, h * 0.65f, withAlpha(T.accent, 95), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        cv.drawRect(0f, 0f, w, h, p)
+        p.shader = RadialGradient(w * 0.15f, 0f, h * 0.4f, withAlpha(T.accent, 55), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        cv.drawRect(0f, 0f, w, h, p)
+        p.shader = null
+        p.style = Paint.Style.STROKE
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeWidth = d * 2.2f
+        p.color = withAlpha(T.accent, 50)
+        cv.drawPoints(dots, p)
+        p.strokeWidth = d * 1f
+        p.color = Color.argb(28, 255, 255, 255)
+        cv.drawPoints(grain, p)
+        for (k in 0..6) {
+            wave(cv, w, h, h * (0.72f + 0.045f * k), h * (0.045f - 0.003f * k), w * (1.3f - 0.07f * k), k * 0.7f, 235 - k * 22, true)
         }
-        for (k in 0..1) {
-            val y = h * (0.08f + 0.03f * k)
-            val path = Path()
-            path.moveTo(-w * 0.1f, y + h * 0.05f)
-            path.cubicTo(w * 0.3f, y - h * 0.05f, w * 0.6f, y + h * 0.08f, w * 1.1f, y - h * 0.03f)
-            p.shader = LinearGradient(0f, 0f, w, 0f, intArrayOf(Color.TRANSPARENT, withAlpha(T.accent, 90), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
-            cv.drawPath(path, p)
+        for (k in 0..2) {
+            wave(cv, w, h, h * (0.05f + 0.03f * k), h * 0.022f, w * 1.1f, 2f + k, 120 - k * 20, false)
         }
+        p.style = Paint.Style.FILL
+        p.shader = RadialGradient(w / 2, h / 2, maxOf(w, h) * 0.8f, intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, Color.argb(170, 0, 0, 0)), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
+        cv.drawRect(0f, 0f, w, h, p)
         p.shader = null
     }
 }
@@ -367,29 +513,42 @@ class PowerView(c: Context) : View(c) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     override fun onDraw(cv: Canvas) {
         val cx = width / 2f; val cy = height / 2f
-        val r = minOf(width, height) * 0.36f
-        if (on) {
-            p.style = Paint.Style.FILL
-            p.shader = RadialGradient(cx, cy, r * 1.7f, intArrayOf(withAlpha(T.accent, 110), withAlpha(T.accent, 30), Color.TRANSPARENT), floatArrayOf(0.5f, 0.75f, 1f), Shader.TileMode.CLAMP)
-            cv.drawCircle(cx, cy, r * 1.7f, p)
-            p.shader = null
+        val r = minOf(width, height) * 0.34f
+        val d = context.dpf(1f)
+        val gl = if (on) 140 else 40
+        p.style = Paint.Style.FILL
+        p.shader = RadialGradient(cx, cy, r * 1.9f, intArrayOf(withAlpha(T.accent, gl), withAlpha(T.accent, gl / 4), Color.TRANSPARENT), floatArrayOf(0.45f, 0.75f, 1f), Shader.TileMode.CLAMP)
+        cv.drawCircle(cx, cy, r * 1.9f, p)
+        p.shader = null
+        p.style = Paint.Style.STROKE
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeWidth = d * 2f
+        p.color = withAlpha(T.accent, if (on) 170 else 55)
+        for (i in 0 until 60) {
+            val a = Math.toRadians(i * 6.0)
+            val r2 = if (i % 5 == 0) r * 1.38 else r * 1.31
+            cv.drawLine((cx + Math.cos(a) * r * 1.22).toFloat(), (cy + Math.sin(a) * r * 1.22).toFloat(),
+                (cx + Math.cos(a) * r2).toFloat(), (cy + Math.sin(a) * r2).toFloat(), p)
         }
         p.style = Paint.Style.FILL
-        p.color = Color.parseColor("#0C0C10")
-        cv.drawCircle(cx, cy, r, p)
+        p.color = Color.parseColor("#050507")
+        cv.drawCircle(cx, cy, r * 1.12f, p)
         p.style = Paint.Style.STROKE
-        p.strokeWidth = context.dpf(7f)
-        if (on) {
-            p.shader = SweepGradient(cx, cy, intArrayOf(T.accent, Color.parseColor("#FFE9A8"), T.accent, Color.parseColor("#B07A00"), T.accent), null)
-        } else p.color = T.stroke
+        p.strokeWidth = d * 10f
+        p.shader = if (on) SweepGradient(cx, cy, intArrayOf(darken(T.accent, 0.5f), T.accent, lighten(T.accent, 0.75f), T.accent, darken(T.accent, 0.5f), T.accent, lighten(T.accent, 0.55f), T.accent, darken(T.accent, 0.5f)), null)
+        else SweepGradient(cx, cy, intArrayOf(Color.parseColor("#2C2C34"), Color.parseColor("#6A6A78"), Color.parseColor("#34343C"), Color.parseColor("#5A5A66"), Color.parseColor("#2C2C34")), null)
         cv.drawCircle(cx, cy, r, p)
         p.shader = null
-        if (on) {
-            p.strokeWidth = context.dpf(1.5f)
-            p.color = withAlpha(T.accent, 120)
-            cv.drawCircle(cx, cy, r * 1.14f, p)
-        }
-        Icons.draw(cv, "power", cx, cy + r * 0.05f, r * 0.42f, if (on) T.accent else T.sub, r * 0.1f)
+        p.style = Paint.Style.FILL
+        p.shader = RadialGradient(cx, cy - r * 0.3f, r, Color.parseColor("#2A2A34"), Color.parseColor("#09090C"), Shader.TileMode.CLAMP)
+        cv.drawCircle(cx, cy, r - d * 6f, p)
+        p.shader = null
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = d * 1.2f
+        p.color = withAlpha(lighten(T.accent, 0.5f), if (on) 170 else 40)
+        cv.drawCircle(cx, cy, r - d * 6f, p)
+        if (on) Icons.draw(cv, "power", cx, cy + r * 0.05f, r * 0.42f, withAlpha(T.accent, 80), r * 0.24f)
+        Icons.draw(cv, "power", cx, cy + r * 0.05f, r * 0.42f, if (on) lighten(T.accent, 0.3f) else T.sub, r * 0.1f)
     }
 }
 
@@ -399,22 +558,29 @@ class NavView(c: Context, private val onSel: (Int) -> Unit) : View(c) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     override fun onMeasure(w: Int, h: Int) { setMeasuredDimension(MeasureSpec.getSize(w), context.dp(66)) }
     override fun onDraw(cv: Canvas) {
-        val w = width.toFloat(); val h = height.toFloat()
-        p.style = Paint.Style.FILL; p.color = T.nav; cv.drawRect(0f, 0f, w, h, p)
-        p.style = Paint.Style.STROKE; p.color = T.stroke; p.strokeWidth = 2f; cv.drawLine(0f, 1f, w, 1f, p)
+        val w = width.toFloat(); val h = height.toFloat(); val d = context.dpf(1f)
+        p.style = Paint.Style.FILL
+        p.shader = LinearGradient(0f, 0f, 0f, h, Color.parseColor("#17171F"), Color.parseColor("#09090D"), Shader.TileMode.CLAMP)
+        cv.drawRect(0f, 0f, w, h, p)
+        p.shader = LinearGradient(0f, 0f, w, 0f, intArrayOf(Color.TRANSPARENT, withAlpha(T.accent, 220), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
+        p.style = Paint.Style.STROKE; p.strokeWidth = d * 2f
+        cv.drawLine(0f, d, w, d, p)
+        p.shader = null
         items.forEachIndexed { i, (name, icon) ->
             val cx = w * (i + 0.5f) / items.size
-            val col = if (i == sel) T.accent else T.sub
+            val col = if (i == sel) lighten(T.accent, 0.2f) else T.sub
             if (i == sel) {
                 p.style = Paint.Style.FILL
-                p.shader = RadialGradient(cx, h * 0.38f, context.dpf(30f), withAlpha(T.accent, 70), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-                cv.drawCircle(cx, h * 0.38f, context.dpf(30f), p)
+                p.shader = RadialGradient(cx, h * 0.38f, d * 34f, withAlpha(T.accent, 90), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+                cv.drawCircle(cx, h * 0.38f, d * 34f, p)
+                p.shader = LinearGradient(cx - d * 16f, 0f, cx + d * 16f, 0f, intArrayOf(Color.TRANSPARENT, T.accent, Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
+                cv.drawRoundRect(RectF(cx - d * 16f, d * 1f, cx + d * 16f, d * 4f), d * 2f, d * 2f, p)
                 p.shader = null
             }
-            Icons.draw(cv, icon, cx, h * 0.38f, context.dpf(10f), col)
+            Icons.draw(cv, icon, cx, h * 0.38f, d * 10f, col)
             p.style = Paint.Style.FILL; p.color = col; p.textAlign = Paint.Align.CENTER
             p.typeface = if (i == sel) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-            p.textSize = context.dpf(11f)
+            p.textSize = d * 11f
             cv.drawText(name, cx, h * 0.82f, p)
         }
     }
@@ -439,29 +605,50 @@ class GaugeView(c: Context) : View(c) {
         val cx = w / 2; val cy = h * 0.52f
         val r = minOf(w, h) * 0.40f
         val rc = RectF(cx - r, cy - r, cx + r, cy + r)
+        p.style = Paint.Style.FILL
+        p.shader = RadialGradient(cx, cy, r * 1.3f, withAlpha(T.accent, 38), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        cv.drawCircle(cx, cy, r * 1.3f, p)
+        p.shader = null
         p.style = Paint.Style.STROKE; p.strokeCap = Paint.Cap.ROUND
-        p.strokeWidth = r * 0.12f
-        p.color = T.stroke
+        p.strokeWidth = r * 0.14f
+        p.color = Color.parseColor("#1E1E26")
         cv.drawArc(rc, 150f, 240f, false, p)
+        p.strokeWidth = r * 0.02f
+        p.color = Color.argb(30, 255, 255, 255)
+        cv.drawArc(RectF(rc.left - r * 0.08f, rc.top - r * 0.08f, rc.right + r * 0.08f, rc.bottom + r * 0.08f), 150f, 240f, false, p)
         val frac = (value / 200f).coerceIn(0f, 1f)
         if (frac > 0f) {
-            p.color = withAlpha(T.accent, 60); p.strokeWidth = r * 0.2f
+            val sg = SweepGradient(cx, cy, intArrayOf(darken(T.accent, 0.45f), T.accent, lighten(T.accent, 0.6f), lighten(T.accent, 0.6f), darken(T.accent, 0.45f)), floatArrayOf(0f, 0.3f, 0.62f, 0.66f, 1f))
+            val m = Matrix(); m.postRotate(150f, cx, cy); sg.setLocalMatrix(m)
+            p.color = withAlpha(T.accent, 55); p.strokeWidth = r * 0.26f
             cv.drawArc(rc, 150f, 240f * frac, false, p)
-            p.color = T.accent; p.strokeWidth = r * 0.12f
+            p.shader = sg; p.strokeWidth = r * 0.14f
             cv.drawArc(rc, 150f, 240f * frac, false, p)
+            p.shader = null
         }
-        p.strokeWidth = 2f; p.color = T.sub
+        p.style = Paint.Style.STROKE; p.strokeWidth = r * 0.012f
+        for (i in 0..40) {
+            val a = Math.toRadians(150.0 + 240.0 * i / 40.0)
+            val r1 = if (i % 10 == 0) r * 0.82 else r * 0.86
+            p.color = if (i % 10 == 0) withAlpha(T.accent, 200) else Color.argb(70, 255, 255, 255)
+            cv.drawLine((cx + Math.cos(a) * r1).toFloat(), (cy + Math.sin(a) * r1).toFloat(), (cx + Math.cos(a) * r * 0.92).toFloat(), (cy + Math.sin(a) * r * 0.92).toFloat(), p)
+        }
         p.style = Paint.Style.FILL; p.textAlign = Paint.Align.CENTER; p.textSize = r * 0.14f; p.typeface = Typeface.DEFAULT
+        p.color = T.sub
         for (v in listOf(0, 50, 100, 150, 200)) {
             val a = Math.toRadians(150.0 + 240.0 * v / 200.0)
-            val x = (cx + Math.cos(a) * r * 0.74).toFloat(); val y = (cy + Math.sin(a) * r * 0.74).toFloat() + p.textSize * 0.35f
+            val x = (cx + Math.cos(a) * r * 0.7).toFloat(); val y = (cy + Math.sin(a) * r * 0.7).toFloat() + p.textSize * 0.35f
             cv.drawText(v.toString(), x, y, p)
         }
         val ang = Math.toRadians(150.0 + 240.0 * frac)
-        p.style = Paint.Style.STROKE; p.strokeCap = Paint.Cap.ROUND; p.strokeWidth = r * 0.045f; p.color = T.accent
-        cv.drawLine((cx + Math.cos(ang) * r * 0.25).toFloat(), (cy + Math.sin(ang) * r * 0.25).toFloat(),
+        p.style = Paint.Style.STROKE; p.strokeCap = Paint.Cap.ROUND; p.strokeWidth = r * 0.05f; p.color = lighten(T.accent, 0.3f)
+        cv.drawLine((cx + Math.cos(ang) * r * 0.2).toFloat(), (cy + Math.sin(ang) * r * 0.2).toFloat(),
             (cx + Math.cos(ang) * r * 0.62).toFloat(), (cy + Math.sin(ang) * r * 0.62).toFloat(), p)
-        p.style = Paint.Style.FILL; p.textAlign = Paint.Align.CENTER; p.typeface = Typeface.DEFAULT_BOLD
+        p.style = Paint.Style.FILL
+        p.shader = RadialGradient(cx, cy, r * 0.1f, lighten(T.accent, 0.6f), darken(T.accent, 0.4f), Shader.TileMode.CLAMP)
+        cv.drawCircle(cx, cy, r * 0.09f, p)
+        p.shader = null
+        p.textAlign = Paint.Align.CENTER; p.typeface = Typeface.DEFAULT_BOLD
         p.color = Color.WHITE; p.textSize = r * 0.4f
         cv.drawText(valueText, cx, cy + r * 0.72f, p)
         p.textSize = r * 0.2f; p.color = T.ok
@@ -476,7 +663,7 @@ class GraphView(c: Context) : View(c) {
 
     override fun onDraw(cv: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
-        p.style = Paint.Style.STROKE; p.strokeWidth = 1f; p.color = T.stroke
+        p.style = Paint.Style.STROKE; p.strokeWidth = 1f; p.color = Color.argb(40, 255, 255, 255)
         for (i in 1..3) cv.drawLine(0f, h * i / 4, w, h * i / 4, p)
         if (data.size < 2) return
         val maxV = maxOf(100L, data.maxOrNull() ?: 100L).toFloat()
@@ -484,6 +671,7 @@ class GraphView(c: Context) : View(c) {
         val x0 = w - (data.size - 1) * step
         val path = Path()
         var pen = false
+        var lastX = x0
         data.forEachIndexed { i, v ->
             val x = x0 + i * step
             if (v < 0) {
@@ -493,9 +681,21 @@ class GraphView(c: Context) : View(c) {
             } else {
                 val y = h - (v / maxV).coerceIn(0f, 1f) * (h - context.dpf(6f)) - context.dpf(3f)
                 if (!pen) { path.moveTo(x, y); pen = true } else path.lineTo(x, y)
+                lastX = x
             }
         }
-        p.color = T.accent; p.strokeWidth = context.dpf(2.4f); p.strokeCap = Paint.Cap.ROUND; p.strokeJoin = Paint.Join.ROUND
+        val fillP = Path(path)
+        fillP.lineTo(lastX, h); fillP.lineTo(x0, h); fillP.close()
+        p.style = Paint.Style.FILL
+        p.shader = LinearGradient(0f, 0f, 0f, h, withAlpha(T.accent, 90), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        cv.drawPath(fillP, p)
+        p.style = Paint.Style.STROKE; p.strokeCap = Paint.Cap.ROUND; p.strokeJoin = Paint.Join.ROUND
+        p.shader = null
+        p.color = withAlpha(T.accent, 60); p.strokeWidth = context.dpf(6f)
         cv.drawPath(path, p)
+        p.shader = LinearGradient(0f, 0f, w, 0f, intArrayOf(darken(T.accent, 0.3f), lighten(T.accent, 0.5f), T.accent), null, Shader.TileMode.CLAMP)
+        p.strokeWidth = context.dpf(2.4f)
+        cv.drawPath(path, p)
+        p.shader = null
     }
 }

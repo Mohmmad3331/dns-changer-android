@@ -81,7 +81,7 @@ class MainActivity : Activity() {
         val r = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val left: View = if (leftIcon != null) IconView(this, leftIcon, T.text, 26).apply { setOnClickListener { onLeft?.invoke() } } else View(this)
         r.add(left, 44, 44)
-        r.add(tv(title, 20f, T.text, true).apply { gravity = Gravity.CENTER }, 0, -2, weight = 1f)
+        r.add(tv(title, 20f, T.text, true).apply { gravity = Gravity.CENTER; gold() }, 0, -2, weight = 1f)
         r.add(View(this), 44, 44)
         return r
     }
@@ -496,7 +496,7 @@ class MainActivity : Activity() {
             setOnClickListener {
                 AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("DNS Changer")
-                    .setMessage("نسخه 1.7\nتغییر DNS با VPN محلی، تست سرعت DNS و تست پینگ بازی‌ها با IPv4 و IPv6.")
+                    .setMessage("نسخه 1.8\nتغییر DNS با VPN محلی، تست سرعت DNS و تست پینگ بازی‌ها با IPv4 و IPv6.")
                     .setPositiveButton("باشه", null).show()
             }
         }
@@ -505,7 +505,7 @@ class MainActivity : Activity() {
         }
         foot.add(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }, 44, 44, r = 12)
         val ft = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        ft.addView(tv("DNS Changer", 16f, T.text, true)); ft.addView(tv("v1.7", 12f, T.sub))
+        ft.addView(tv("DNS Changer", 16f, T.text, true)); ft.addView(tv("v1.8", 12f, T.sub))
         foot.add(ft, -2, -2)
         col.add(foot, t = 16)
         return sc
